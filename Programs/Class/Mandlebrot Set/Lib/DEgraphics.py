@@ -15,6 +15,9 @@
 
    PLATFORMS: The package is a wrapper around Tkinter and
    should run on any platform where Tkinter is available.
+   
+   Alexander Irausquin-Petit January 2023:
+        Modified Image to allow passing an image in the constructor
 
    Latest version modified June 2020 by JS Iwanski
    to add:
@@ -1107,12 +1110,14 @@ class Image(GraphicsObject):
     idCount = 0
     imageCache = {} # tk photoimages go here to avoid GC while drawn
 
-    def __init__(self, p, *pixmap):
+    def __init__(self, p, *pixmap, image = None):
         GraphicsObject.__init__(self, [])
         self.anchor = p.clone()
         self.imageId = Image.idCount
         Image.idCount = Image.idCount + 1
-        if len(pixmap) == 1: # file name provided
+        if image is not None: # image object provided
+            self.img = tk.PhotoImage(image, master=_root)
+        elif len(pixmap) == 1: # file name provided
             self.img = tk.PhotoImage(file=pixmap[0], master=_root)
         else: # width and height provided
             width, height = pixmap

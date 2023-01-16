@@ -1,6 +1,6 @@
 from colorsys import hsv_to_rgb
 import math
-from Lib.DEgraphics import *
+from Lib.DEgraphicsModified import *
 
 
 class QuadraticExplorer:
