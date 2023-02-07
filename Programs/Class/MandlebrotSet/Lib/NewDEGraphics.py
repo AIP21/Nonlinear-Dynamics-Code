@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from decimal import Decimal
+import struct
 
 try: # python 3
     import tkinter as tk
@@ -14,7 +15,13 @@ try: # python 3
     from tkinter import PhotoImage
     from tkinter import TclError
     
-    from PIL import Image as PImage, ImageTk, ImageColor, ImageDraw, ImageFilter
+    hasPIL = True
+    
+    try:
+        from PIL import Image as PImage, ImageTk, ImageColor, ImageDraw, ImageFilter
+    except:
+        hasPIL = False
+    
     import base64
     import hashlib
     import io
@@ -117,6 +124,8 @@ class AutoScrollbar(Scrollbar):
         raise TclError("cannot use place with this widget")
 
 class DEGraphWin(tk.Tk):
+    customCoords = [-1, -1, 1, 1]
+    
     """Window for displaying anything. This is the main window for DE Graphics
     
     Usage:
@@ -130,19 +139,68 @@ class DEGraphWin(tk.Tk):
         height (int): Height of the window
         **kw: Other arguments to pass to tk.Tk
     """
-    def __init__(self, title = "Window", width = 500, height = 500, **kw):
+    def __init__(self, title = "Window", customCoords = [-1, -1, 1, 1], width = 500, height = 500, **kw):
         tk.Tk.__init__(self)
         self.title(title)
         self.kw = kw
+        self.customCoords = customCoords
         self.width = width
         self.height = height
-                
+        
         self.protocol("WM_DELETE_WINDOW", self.close)
-        self.geometry('%dx%d' % (width + 14, height))
+        self.geometry('%dx%d' % (width, height))
+        
+        self.pixelCanvas = tk.Canvas(self, bd = 0, borderwidth = 0, width = width, height = height)
+        self.pixelCanvas.grid(row = 0, column = 0, sticky = N+S+E+W)
 
     def close(self):
         self.destroy()
+    
+    def _on_mousewheel(self, event):
+        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    """
+    Set this window's custom coordinates
+    Only affects new pixels being plotted
+    """
+    def setCustomCoords(self, coords):
+        self.customCoords = coords
+
+    """
+    Plot a pixel using pixel coordinates
+    """
+    def plot(self, x, y, color = 'red'):
+        self.pixelCanvas.create_line(x, y, x + 1, y, fill = color)
+    
+    """
+    Plot a pixel using the custom coordinates
+    """
+    def plotLocal(self, x, y, color = 'red'):
+        _x = remap(x, self.customCoords[0], self.customCoords[2], 0, self.width)
+        _y = remap(y, self.customCoords[1], self.customCoords[3], 0, self.height)
+        return self.pixelCanvas.create_line(_x, _y, _x + 1, _y, fill = color)
+    
+    def setOnClick(self, func):
+        '''
+        Set the function to call when this Image object is clicked
         
+        Args:
+            func: The function to call
+        '''
+        self.bind("<Button-1>", func)
+
+    def setOnRightClick(self, func):
+        '''
+        Set the function to call when this Image object is right clicked
+        
+        Args:
+            func: The function to call
+        '''
+        self.bind("<Button-3>", func)
+    
+    def remove(self, item):
+        self.canvas.delete(item.id)
+    
     def __enter__(self):
         global _root, _pack_side
 
@@ -178,13 +236,7 @@ class DEGraphWin(tk.Tk):
         _pack_side = TOP
         _root = self.frame
         return self # was _root for some reason
-    
-    def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        
-    def remove(self, item):
-        self.canvas.delete(item.id)
-        
+     
     def __exit__(self, type, value, traceback):
         global _root, _pack_side
         
@@ -226,9 +278,31 @@ class Slot(tk.Frame):
         self._root_old = _root
         self._pack_side_old = _pack_side
         tk.Frame.__init__(self, self._root_old, **self.kw)
+        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0)
         self.pack( side = self._pack_side_old, fill = tk.X)
         _root = self
+    
+    def plot(self, x, y, color = 'red'):
+        return self.canvas.create_line(x, y, x + 1, y, fill = color)
+    
+    def setOnClick(self, func):
+        '''
+        Set the function to call when this Image object is clicked
         
+        Args:
+            func: The function to call
+        '''
+        self.bind("<Button-1>", func)
+
+    def setOnRightClick(self, func):
+        '''
+        Set the function to call when this Image object is right clicked
+        
+        Args:
+            func: The function to call
+        '''
+        self.bind("<Button-3>", func)
+    
     def __exit__(self, type, value, traceback):
         global _root, _pack_side
         _root = self._root_old
@@ -1057,7 +1131,6 @@ class ScrollableFrame(tk.Frame):
 class Image(tk.Canvas):
     '''
     An image. Takes an image file from path. 
-    #Broken, ignore: If imageWidth and imageHeight are specified, the image will be resized to those values.
     '''
     
     def __init__(self, width, height, path = None, image = None, resizeImage = True, resizeKeepAspectRatio = True, imageWidth = None, imageHeight = None):
@@ -1105,8 +1178,12 @@ class Image(tk.Canvas):
             img = resizeImage(image, size = (self.imgWidth, self.imgHeight), keep_aspect_ratio = resizeKeepAspectRatio)
         else:
             img = image
+                
+        if hasPIL:
+            self.image = ImageTK.PhotoImage(master = _root, image = img)
+        else:
+            print("PIL not installed. Cannot set image from image object")
         
-        self.image = ImageTk.PhotoImage(master = _root, image = img)
         self.itemconfig(self.img, image = self.image)
         self.pack(side = _pack_side)
     
@@ -1119,7 +1196,10 @@ class Image(tk.Canvas):
             resize: Whether or not to resize the image to the size of this widget or the size specified in the constructor
             resizeKeepAspectRatio: Whether or not to keep the aspect ratio of the image when resizing
         '''
-        self.setImage(PImage.open(path), resize, resizeKeepAspectRatio)
+        if hasPIL:
+            self.setImage(PImage.open(path), resize, resizeKeepAspectRatio)
+        else:
+            print("PIL not installed. Cannot set image from path.")
     
     def setWidth(self, width):
         '''
@@ -1172,7 +1252,12 @@ class Image(tk.Canvas):
         '''
         img = resizeImage(self.image, size = (width, height), keep_aspect_ratio = True)
         
-        self.image = ImageTk.PhotoImage(master = _root, image = img)
+        if hasPIL:
+            self.image = ImageTk.PhotoImage(master = _root, image = img)
+        else:
+            print("PIL not installed. Cannot resize image.")
+        
+        
         self.itemconfig(self.img, image = self.image)
         self.pack(side = _pack_side)
     
@@ -2847,6 +2932,44 @@ def colorRGB(r,g,b):
     Each value MUST be an integer in the interval [0,255]
     Returns color specifier string for the resulting color'''
     return "#%02x%02x%02x" % (r,g,b)
+
+def remap(value, min1, max1, min2, max2) -> float:
+    return min2 + (value - min1) * (max2 - min2) / (max1 - min1)
+
+def lerpColor(color1, color2, amount):
+    r = int(lerp(amount, color1[0], color2[0]))
+    g = int(lerp(amount, color1[1], color2[1]))
+    b = int(lerp(amount, color1[2], color2[2]))
+    return (r, g, b)
+
+def lerp(val, a, b) -> float:
+    return a + (b - a) * val
+
+def inverseLerp(val, a, b) -> float:
+    return (val - a) / (b - a)
+
+def gaussian(x, a, b, c, d = 0):
+    return a * math.exp(-(x - b) ** 2 / (2 * c ** 2)) + d
+
+# Get the color from a gradient using a number from 0 to 1
+def getGradientColor(val, gradient):
+    col = gradient[int(max(0, min(1, val)) * (len(gradient) - 1))]
+    return (col[0] * 255, col[1] * 255, col[2] * 255)
+
+# https://en.wikipedia.org/wiki/Fast_inverse_square_root
+def fastInverseSqrt(number):
+    threehalfs = 1.5
+    x2 = number * 0.5
+    y = number
+    
+    packed_y = struct.pack('f', y)
+    i = struct.unpack('i', packed_y)[0]  # evil floating point bit level hacking
+    i = 0x5f3759df - (i >> 1)            # what the fuck?
+    packed_i = struct.pack('i', i)
+    y = struct.unpack('f', packed_i)[0]  # treat int bytes as float
+    
+    y = y * (threehalfs - (x2 * y * y))  # newtons method
+    return y
 #endregion
 
 if __name__ == "__main__":    

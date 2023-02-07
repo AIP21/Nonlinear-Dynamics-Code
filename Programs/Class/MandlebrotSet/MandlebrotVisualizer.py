@@ -24,7 +24,7 @@ class MandlebrotSetExplorer():
     width = 1300
     height = 700
 
-    renderSize = (1000, 1000) # The size of the image to render in pixels
+    renderSize = (500, 500) # The size of the image to render in pixels
     computeThreads = 16 # The number of threads to use for computing
     
     mandlebrotIterations = 100 # The iterations of the mandlebrot set used when drawing
@@ -355,8 +355,8 @@ class MandlebrotSetExplorer():
                         recenterM = Button(text = "Recenter", width = 100, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8 bold", command = self.recenterMandlebrotSet)
                         recenterM.setHoverEffect(("darken", (10, 10, 10)))
 
-                    self.mandlebrotImage = ndg.Image(image = preRenderImageMandlebrot, width = self.imageWidth, height = self.height)
-                    self.mandlebrotImage.setOnClick(self.mandlebrotImageClicked)
+                    # self.mandlebrotImage = ndg.Image(image = preRenderImageMandlebrot, width = self.imageWidth, height = self.height)
+                    self.mandlebrotSetFrame.setOnClick(self.mandlebrotImageClicked)
                 
                 self.juliaSetFrame = Stack()
                 with self.juliaSetFrame:
@@ -384,12 +384,78 @@ class MandlebrotSetExplorer():
             self.mandlebrotRenderThread.stop()
         
         # Start the thread
-        self.mandlebrotRenderThread = StoppableThread(name = "mandlebrotRenderThread", target = self.renderMandlebrotSet)
+        self.mandlebrotRenderThread = StoppableThread(name = "mandlebrotRenderThread", target = self.renderMandlebrotSet2)
         self.mandlebrotRenderThread.start()
         
         # Disable drawing the set again set while it is being drawn
         self.drawMandlebrotButton.disable()
-    
+
+    # Done on another thread to avoid freezing. Render the mandlebrot using a sweep algorithm
+    def renderMandlebrotSet2(self):
+        # Compute the mandlebrot's set
+        print("Computing the mandlebrot's set")
+        startTime = time.time() * 1000
+        
+        # Calculate mandlebrot's set into an array using numpy, using vEcToRiZaTiOn
+        rMin = self.mandlebrotCustomCoords[0]
+        rMax = self.mandlebrotCustomCoords[2]
+        iMin = self.mandlebrotCustomCoords[1]
+        iMax = self.mandlebrotCustomCoords[3]
+        
+        startTime = time.time() * 1000
+        
+        # Create ALL the x and y values
+        x = np.linspace(rMin, rMax, self.renderSize[0]).reshape((1, self.renderSize[0]))
+        y = np.linspace(iMin, iMax, self.renderSize[1]).reshape((self.renderSize[1], 1))
+        
+        # Create ALL the complex numbers
+        c = x + 1j * y
+        
+        # Initialize z to ALL be zero
+        z = np.zeros(c.shape, dtype = np.complex128)
+        
+        # Keep track in which iteration the points diverged
+        divergenceTimes = np.zeros((self.renderSize[1], self.renderSize[0]), dtype = 'i')
+        
+        for i in range(self.mandlebrotIterations):
+            z = z**2 + c
+            
+            divergence = z * np.conj(z) > 2**2
+            
+            diverged = divergence & (divergenceTimes == self.mandlebrotIterations)
+            
+            divergenceTimes[diverged] = i
+            z[divergence] = 2
+        
+        print("Finished computing the mandlebrot's set in: " + str((time.time() * 1000) - startTime) + "ms")
+        
+        pixels = []
+        
+        sweeps = 10
+        for sweep in range(sweeps):
+            i = sweep
+            
+            while i < self.renderSize[0]:
+                for j in range(self.renderSize[1]):
+                    # if divergenceTimes[j, i] == self.mandlebrotIterations:
+                    #     pixels.append(self.mandlebrotSetFrame.putPixel(i, j, (0, 0, 0)))
+
+                    if divergenceTimes[j, i] != self.mandlebrotIterations:
+                        pixels.append(self.mandlebrotSetFrame.plot(i, j, 'red'))
+                i += sweeps
+            
+            self.mandlebrotSetFrame.update()
+            
+            print("SWEEP")
+        
+        print("Finished drawing to an image in: " + str((time.time() * 1000) - startTime) + "ms")
+        
+        print("Iters: " + str(self.mandlebrotIterations))
+        
+        
+        self.mandlebrotRendered = True
+        self.drawMandlebrotButton.enable()
+
     # Done on another thread to avoid freezing. Render the mandlebrot set to an image and display that image
     def renderMandlebrotSet(self):
         # Compute the mandlebrot's set
@@ -467,16 +533,23 @@ class MandlebrotSetExplorer():
         
         # Keep track on which points did not converge so far
         m = np.full(c.shape, True, dtype = bool)
+        
         for i in range(maxIterations):
+            # Iterate
             z[m] = z[m] ** 2 + c[m]
-            diverged = np.greater(np.abs(z), 2, out = np.full(c.shape, False), where = m) # Find diverging
-                        
+            
+            # Find diverging
+            diverged = np.greater(np.abs(z), 2, out = np.full(c.shape, False), where = m)
+
+            # Assign colors
             if method == 1:
                 # Threshold coloring
                 pixels[diverged] = color
-            elif method == 2: # Smooth coloring
+            elif method == 2:
+                # Smooth coloring
                 pixels[diverged] = getGradientColor(i / maxIterations, colorGradient)
-            elif method == 3: # Random coloring
+            elif method == 3:
+                # Random coloring
                 pixels[diverged] = (random.random() * 255, random.random() * 255, random.random() * 255)
 
             # Remember which have diverged
@@ -746,7 +819,7 @@ class MandlebrotSetExplorer():
         return pixels
     #endregion
 
-    # #region Sound
+    #region Sound
     # def playOrbitSound(self):
     #     if(self.clickedOrbit == None):
     #         return
@@ -797,7 +870,7 @@ class MandlebrotSetExplorer():
     #     file.close()
         
     #     return str("tones/orbitTone.wav")
-    # #endregion
+    #endregion
 
     #region Interaction
     # Clicked on the mandlebrot set
