@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"java.project.referencedLibraries": {
+			"include": [
+				"lib/**/*.jar",
+				"c:\\Users\\20ani\\Downloads\\JWinPointer.jar"
+			],
+			"exclude": [
+				"c:\\Users\\20ani\\Downloads\\SMT.jar"
+			]
+		}
+	}
+}

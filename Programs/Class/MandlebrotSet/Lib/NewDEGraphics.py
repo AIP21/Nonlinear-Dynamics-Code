@@ -124,7 +124,7 @@ class AutoScrollbar(Scrollbar):
         raise TclError("cannot use place with this widget")
 
 class DEGraphWin(tk.Tk):
-    customCoords = [-1, -1, 1, 1]
+    dragStart = (0, 0)
     
     """Window for displaying anything. This is the main window for DE Graphics
     
@@ -139,47 +139,22 @@ class DEGraphWin(tk.Tk):
         height (int): Height of the window
         **kw: Other arguments to pass to tk.Tk
     """
-    def __init__(self, title = "Window", customCoords = [-1, -1, 1, 1], width = 500, height = 500, **kw):
+    def __init__(self, title = "Window", width = 500, height = 500, **kw):
         tk.Tk.__init__(self)
         self.title(title)
         self.kw = kw
-        self.customCoords = customCoords
         self.width = width
         self.height = height
         
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.geometry('%dx%d' % (width, height))
-        
-        self.pixelCanvas = tk.Canvas(self, bd = 0, borderwidth = 0, width = width, height = height)
-        self.pixelCanvas.grid(row = 0, column = 0, sticky = N+S+E+W)
 
     def close(self):
         self.destroy()
     
     def _on_mousewheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-    """
-    Set this window's custom coordinates
-    Only affects new pixels being plotted
-    """
-    def setCustomCoords(self, coords):
-        self.customCoords = coords
-
-    """
-    Plot a pixel using pixel coordinates
-    """
-    def plot(self, x, y, color = 'red'):
-        self.pixelCanvas.create_line(x, y, x + 1, y, fill = color)
-    
-    """
-    Plot a pixel using the custom coordinates
-    """
-    def plotLocal(self, x, y, color = 'red'):
-        _x = remap(x, self.customCoords[0], self.customCoords[2], 0, self.width)
-        _y = remap(y, self.customCoords[1], self.customCoords[3], 0, self.height)
-        return self.pixelCanvas.create_line(_x, _y, _x + 1, _y, fill = color)
-    
+     
     def setOnClick(self, func):
         '''
         Set the function to call when this Image object is clicked
@@ -268,23 +243,39 @@ class DEGraphWin(tk.Tk):
         
         # stop all ongoing _events
         [event.set() for event in _events]
-        
-class Slot(tk.Frame):
-    def __init__(self, **kw):
+
+class Window(tk.Toplevel):
+    dragStart = (0, 0)
+    
+    """Window for displaying anything.
+    
+    Usage:
+        win = Window(title = "Test Window", width = 100, height = 100)
+        with win:
+            Label("Hello World!")
+
+    Args:
+        title (str): Title of the window
+        width (int): Width of the window
+        height (int): Height of the window
+        **kw: Other arguments to pass to tk.Tk
+    """
+    def __init__(self, title = "Window", width = 500, height = 500, **kw):
+        tk.Toplevel.__init__(self)
+        self.title(title)
         self.kw = kw
+        self.width = width
+        self.height = height
         
-    def __enter__(self):
-        global _root, _pack_side
-        self._root_old = _root
-        self._pack_side_old = _pack_side
-        tk.Frame.__init__(self, self._root_old, **self.kw)
-        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0)
-        self.pack( side = self._pack_side_old, fill = tk.X)
-        _root = self
+        self.protocol("WM_DELETE_WINDOW", self.close)
+        self.geometry('%dx%d' % (width, height))
+
+    def close(self):
+        self.destroy()
     
-    def plot(self, x, y, color = 'red'):
-        return self.canvas.create_line(x, y, x + 1, y, fill = color)
-    
+    def _on_mousewheel(self, event):
+        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+     
     def setOnClick(self, func):
         '''
         Set the function to call when this Image object is clicked
@@ -303,10 +294,121 @@ class Slot(tk.Frame):
         '''
         self.bind("<Button-3>", func)
     
+    def remove(self, item):
+        self.canvas.delete(item.id)
+    
+    def __enter__(self):
+        global _root, _pack_side
+
+        # Create scroll bar
+        self.vscrollbar = AutoScrollbar(self)
+        self.vscrollbar.grid(row = 0, column = 1, sticky = N+S)
+
+        # Create canvas
+        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
+        self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
+
+        # Configure scroll bar for canvas
+        self.vscrollbar.config(command = self.canvas.yview)
+
+        # Make the canvas expandable
+        self.grid_rowconfigure(0, weight = 1)
+        self.grid_columnconfigure(0, weight = 1)
+
+        # Create frame in canvas
+        self.frame = tk.Frame(self.canvas, borderwidth = 0, bd = 0)
+        self.frame.columnconfigure(0, weight = 1)
+        self.frame.columnconfigure(1, weight = 1)
+        
+        self.frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(
+                scrollregion = self.canvas.bbox("all")
+            ),
+        )
+
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+
+        _pack_side = TOP
+        _root = self.frame
+        return self # was _root for some reason
+     
+    def __exit__(self, type, value, traceback):
+        global _root, _pack_side
+        
+        # puts tkinter widget onto canvas
+        self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(self.canvas.config()['width'][4])-int(self.vscrollbar.config()['width'][4]))
+
+        # deal with canvas being resized
+        def resize_canvas(event):
+            self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(event.width)-int(self.vscrollbar.config()['width'][4]))
+        self.canvas.bind("<Configure>", resize_canvas)
+
+        # updates geometry management
+        self.frame.update_idletasks()
+
+        # set canvas scroll region to all of the canvas
+        self.canvas.config(scrollregion = self.canvas.bbox("all"))
+
+        # set minimum window width
+        self.update()
+        self.minsize(self.winfo_width(), 0)
+        self.config(**self.kw)
+        
+        self.frame.update()
+        
+        # start mainloop
+        self.mainloop()
+                
+        _pack_side = None
+        
+        # stop all ongoing _events
+        [event.set() for event in _events]
+
+class Slot(tk.Frame):
+    def __init__(self, **kw):
+        self.kw = kw
+        
+    def __enter__(self):
+        global _root, _pack_side
+        self._root_old = _root
+        self._pack_side_old = _pack_side
+        tk.Frame.__init__(self, self._root_old, **self.kw)
+        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0)
+        self.pack( side = self._pack_side_old, fill = tk.X)
+        _root = self
+    
     def __exit__(self, type, value, traceback):
         global _root, _pack_side
         _root = self._root_old
         _pack_side = self._pack_side_old
+    
+    def setOnClick(self, func):
+        '''
+        Set the function to call when this widget is clicked
+        
+        Args:
+            func: The function to call
+        '''
+        self.bind("<Button-1>", func)
+
+    def setOnRightClick(self, func):
+        '''
+        Set the function to call when this widget is right clicked
+        
+        Args:
+            func: The function to call
+        '''
+        self.bind("<Button-3>", func)
+    
+    def setOnDrag(self, func):
+        '''
+        Set the function to call when the user drags the mouse on this widget
+        
+        Args:
+            func: The function to call
+        '''
+        self.bind("<B1-Motion>", func)
         
 class Stack(Slot):
     def __init__(self, **kw):
@@ -362,7 +464,7 @@ class Button(tk.Canvas):
         self.padding = padding
 
         # Create background rounded rectangle
-        self.rect = RoundedRectangle(self, padding, padding, width - padding * 2, height - padding * 2, cornerRadius, colorRGB(*self.color))
+        self.rect = RoundedRectangle(self, padding, padding, width - padding * 2, height - padding * 2, cornerRadius, color = colorRGB(*self.color))
         self.rect.draw()
         
         # Create the text label
@@ -378,17 +480,18 @@ class Button(tk.Canvas):
     
         self.pack(side = _pack_side)
     
-    '''
-    Set the button's hover effect
-    
-    Options:
-        "grow (x, y)": The button will grow when hovered over (default).
-        "darken (r, g, b)": The button will darken when hovered over.
-        "grow/darken (x, y, (r, g, b))": The button will grow and darken when hovered over.
-        "color (r, g, b)": The button will change color when hovered over.
-        "none": The button will not have a hover effect
-    '''
     def setHoverEffect(self, hoverEffect):
+        '''
+        Set the button's hover effect
+        
+        Options:
+            "grow (x, y)": The button will grow when hovered over (default).
+            "darken (r, g, b)": The button will darken when hovered over.
+            "grow/darken (x, y, (r, g, b))": The button will grow and darken when hovered over.
+            "color (r, g, b)": The button will change color when hovered over.
+            "none": The button will not have a hover effect
+        '''
+        
         self.hoverEffect = hoverEffect
     
     def hoverEnter(self, event):
@@ -498,7 +601,8 @@ class Button(tk.Canvas):
         self.textvariable.set(text)
 
 class Label(tk.Label):
-    """
+    
+    '''
     A text label.
 
     Args:
@@ -514,8 +618,7 @@ class Label(tk.Label):
         highlightthickness, image, justify,
         padx, pady, relief, takefocus, text,
         textvariable, underline, wraplength
-    """
-    
+    '''
     def __init__(self, text = "", color = "black", font = "Arial 10 bold", **kw):
         self.kw   = kw
         self.textvariable = tk.StringVar()
@@ -628,7 +731,7 @@ class TextBox(tk.Frame):
         self.entry.place(relx = cornerRadius / width, rely = padding / height, relwidth = 1 - ((cornerRadius * 2) / width), relheight = 1 - ((padding * 2) / height))
 
         # Create background rounded rectangle
-        self.rect = RoundedRectangle(self.canvas, padding, padding, width - padding * 2, height - padding * 2, cornerRadius, colorRGB(*self.color))
+        self.rect = RoundedRectangle(self.canvas, padding, padding, width - padding * 2, height - padding * 2, cornerRadius, color = colorRGB(*self.color))
         self.rect.draw()
     
         # Bind actions
@@ -1299,54 +1402,180 @@ class Image(tk.Canvas):
 
 class Plot(tk.Canvas):
     '''
-    A 2D plot where you can draw points onto. (this time its FAST)
+    A 2D plot where you can draw points onto. Just like the plot function on DEGraphWin but this time it's FAST.
+    
+    You can drag the mouse to create a selection box.
     
     Create the plot with an array of pre-configured pixels or just plot points onto it later.
     '''
     
-    def __init__(self, width, height, backgroundColor, pixels = None):
-        '''
-        Args:
-            pixels: Initialize this plot with an array of pixels. The array should be a 1D array of RGB tuples.
-        '''
+    enableSelectionBox = True
+    selectionBox = None
+    selectionMaintainAspectRatio = False
+    
+    clickFunc = None
+    dragFunc = None
+    
+    def __init__(self, width, height, background = 'white'):
         self.width = width
         self.height = height
-        super().__init__(_root, width = self.width, height = self.height, bd = 0, highlightthickness = 0)
-
-        if pixels:
-            self.image = PImage.fromarray(pixels)
-        else:
-            self.image = PImage.new("RGB", (width, height), backgroundColor)
+        self.background = background
         
-        self.image.save("image.png")
+        super().__init__(_root, width = self.width, height = self.height, bd = 0, highlightthickness = 0)
             
-        self.imageP = PhotoImage(master = _root, file = "image.png", height = self.height, width = self.width)
+        self.imageP = PhotoImage(master = _root, height = self.height, width = self.width)
+        
+        # Set background color
+        self.imageP.put(background, to = (0, 0, self.width, self.height))
         
         self.imageObj = self.create_image(0, 0, image = self.imageP, anchor = tk.NW)
         self.pack(side = _pack_side)
         
-    def plot(self, x, y, color):
-        self.image.putpixel((x, y), color)
+        self.bind("<B1-Motion>", self.dragClick)
+        self.bind("<Button-1>", self.onClickDown)
+        self.bind("<ButtonRelease-1>", self.onClickUp)
         
-        self.image.save("image.png")
+        self.dragBox = None
+    
+    def onClickDown(self, event):
+        if self.clickDownFunc != None:
+            self.clickDownFunc(event)
+        
+        self.dragStart = (event.x, event.y)
+    
+    def onClickUp(self, event):
+        if self.clickUpFunc != None:
+            self.clickUpFunc(event)
+        
+        if self.dragBox != None:
+            self.delete(self.dragBox)
+            self.dragBox = None
+    
+    def dragClick(self, event):
+        if self.dragFunc != None:
+            self.dragFunc(event)
+        
+        if self.enableSelectionBox:
+            if self.selectionMaintainAspectRatio:
+                # Keep the selection box sqaure
+                if event.x - self.dragStart[0] > event.y - self.dragStart[1]:
+                    self.selectionBox = (self.dragStart[0], self.dragStart[1], event.x, self.dragStart[1] + event.x - self.dragStart[0])
+                else:
+                    self.selectionBox = (self.dragStart[0], self.dragStart[1], self.dragStart[0] + event.y - self.dragStart[1], event.y)
+            else:
+                self.selectionBox = (self.dragStart[0], self.dragStart[1], event.x, event.y)
+                    
+            # Draw a selection rectangle
+            if self.dragBox == None:
+                self.dragBox = self.create_rectangle(*self.selectionBox, outline = "red", width = 2)
+            else:
+                # Resize the drag box
+                self.coords(self.dragBox, *self.selectionBox)
             
-        self.imageP = PhotoImage(master = _root, file = "image.png", height = self.height, width = self.width)
+            # Make sure the drag box is on top
+            self.tag_raise(self.dragBox, self.imageObj)
+    
+    def plot(self, x, y, color):
+        self.imageP.put("{color}".format(color = color), (x, y))
+            
+    def plotBulk(self, xStart, yStart, colors):
+        self.imageP.put(colors, (xStart, yStart))
+    
+    def fill(self, color, x, y, width, height):
+        '''
+        Fill a rectangle with a color
+        '''
+        colorRows = ""
         
-        self.delete(self.imageObj)
-        self.imageObj = self.create_image(0, 0, image = self.imageP, anchor = tk.NW)
+        for y in range(height):
+            rowColors = []
+            
+            for x in range(width):
+                rowColors.append(color)
+            
+            colorRows += ("{" + str(rowColors)[1:-1].replace('\'', '').replace(',', '') + "} ")
+        
+        self.imageP.put(rowColors, to = (x, y))
+    
+    def reset(self):
+        self.fill(self.background, 0, 0, self.width, self.height)
+    
+    def clear(self):
+        self.imageP.blank()
+    
+    # def refresh(self):
+    #     self.itemconfig(self.imageObj, image = self.imageP)
+    #     self.pack(side = _pack_side)
+        
+    #     self.update()
+    
+    def getWidth(self):
+        '''
+        Get the width of this widget
+        
+        Returns:
+            The width of this widget
+        '''
+        return self.winfo_width()
+
+    def getHeight(self):
+        '''
+        Get the height of this widget
+        
+        Returns:
+            The height of this widget
+        '''
+        return self.winfo_height()
+
+    def setOnClickDown(self, func):
+        '''
+        Set the function to call when the mouse is pressed above this widget
+        
+        Args:
+            func: The function to call
+        '''
+        self.clickDownFunc = func
+    
+    def setOnClickUp(self, func):
+        '''
+        Set the function to call when the mouse is unpressed above this widget
+        
+        Args:
+            func: The function to call
+        '''
+        self.clickUpFunc = func
+
+    def setOnRightClick(self, func):
+        '''
+        Set the function to call when this widget is right clicked
+        
+        Args:
+            func: The function to call
+        '''
+        self.bind("<Button-3>", func)
+
+    def setOnDrag(self, func):
+        '''
+        Set the function to call when the user drags the mouse on this widget
+        
+        Args:
+            func: The function to call
+        '''
+        self.dragFunc = func
 
 class Graph(tk.Frame):
     """
     Tkinter native graph (pretty basic, but doesn't require heavy install).::
+    
     NOTE: This must me created INSIDE of a frame, like so:
     with Stack():
         graph = tk_tools.Graph(
-            x_min=-1.0,
-            x_max=1.0,
-            y_min=0.0,
-            y_max=2.0,
-            x_tick=0.2,
-            y_tick=0.2,
+            xMin=-1.0,
+            xMax=1.0,
+            yMin=0.0,
+            yMax=2.0,
+            xTicks=0.2,
+            yTicks=0.2,
             width=500,
             height=400
         )
@@ -1355,46 +1584,37 @@ class Graph(tk.Frame):
         line_0 = [(x/10, x/10) for x in range(10)]
         graph.plot_line(line_0)
         
-    :param x_min: the x minimum
-    :param x_max: the x maximum
-    :param y_min: the y minimum
-    :param y_max: the y maximum
-    :param x_tick: the 'tick' on the x-axis
-    :param y_tick: the 'tick' on the y-axis
-    :param options: additional valid tkinter.canvas options
+    :param xMin: the x minimum
+    :param xMax: the x maximum
+    :param yMin: the y minimum
+    :param yMax: the y maximum
+    :param xTicks: the 'tick' on the x-axis
+    :param yTicks: the 'tick' on the y-axis
+    :param args: additional valid tkinter.canvas options
     """
 
-    def __init__(
-        self,
-        x_min: float,
-        x_max: float,
-        y_min: float,
-        y_max: float,
-        x_tick: float,
-        y_tick: float,
-        **options
-    ):
+    def __init__(self, minX: float, maxX: float, minY: float, maxY: float, xTicks: float, yTicks: float, **args):
         self._parent = _root
-        super().__init__(self._parent, **options)
+        super().__init__(self._parent, **args)
 
         self.canvas = tk.Canvas(self)
         self.canvas.grid(row=0, column=0)
 
         self.w = float(self.canvas.config("width")[4])
         self.h = float(self.canvas.config("height")[4])
-        self.x_min = x_min
-        self.x_max = x_max
-        self.x_tick = x_tick
-        self.y_min = y_min
-        self.y_max = y_max
-        self.y_tick = y_tick
-        self.px_x = (self.w - 100) / ((x_max - x_min) / x_tick)
-        self.px_y = (self.h - 100) / ((y_max - y_min) / y_tick)
+        self.minX = minX
+        self.maxX = maxX
+        self.xTicks = xTicks
+        self.yMin = minY
+        self.yMax = maxY
+        self.yTicks = yTicks
+        self.pixX = (self.w - 100) / ((maxX - minX) / xTicks)
+        self.pixY = (self.h - 100) / ((maxY - minY) / yTicks)
 
-        self.draw_axes()
+        self.drawAxes()
         self.pack(side = _pack_side)
 
-    def draw_axes(self):
+    def drawAxes(self):
         """
         Removes all existing series and re-draws the axes.
         :return: None
@@ -1404,22 +1624,22 @@ class Graph(tk.Frame):
 
         self.canvas.create_rectangle(rect, outline="black")
 
-        for x in self.frange(0, self.x_max - self.x_min + 1, self.x_tick):
-            value = Decimal(self.x_min + x)
-            if self.x_min <= value <= self.x_max:
-                x_step = (self.px_x * x) / self.x_tick
+        for x in self.frange(0, self.maxX - self.minX + 1, self.xTicks):
+            value = Decimal(self.minX + x)
+            if self.minX <= value <= self.maxX:
+                x_step = (self.pixX * x) / self.xTicks
                 coord = 50 + x_step, self.h - 50, 50 + x_step, self.h - 45
                 self.canvas.create_line(coord, fill="black")
                 coord = 50 + x_step, self.h - 40
 
-                label = round(Decimal(self.x_min + x), 1)
+                label = round(Decimal(self.minX + x), 1)
                 self.canvas.create_text(coord, fill="black", text=label)
 
-        for y in self.frange(0, self.y_max - self.y_min + 1, self.y_tick):
-            value = Decimal(self.y_max - y)
+        for y in self.frange(0, self.yMax - self.yMin + 1, self.yTicks):
+            value = Decimal(self.yMax - y)
 
-            if self.y_min <= value <= self.y_max:
-                y_step = (self.px_y * y) / self.y_tick
+            if self.yMin <= value <= self.yMax:
+                y_step = (self.pixY * y) / self.yTicks
                 coord = 45, 50 + y_step, 50, 50 + y_step
                 self.canvas.create_line(coord, fill="black")
                 coord = 35, 50 + y_step
@@ -1427,7 +1647,7 @@ class Graph(tk.Frame):
                 label = round(value, 1)
                 self.canvas.create_text(coord, fill="black", text=label)
 
-    def plot_point(self, x, y, visible=True, color="black", size=5):
+    def plotPoint(self, x, y, visible = True, color = "black", size = 5):
         """
         Places a single point on the grid
         :param x: the x coordinate
@@ -1437,8 +1657,8 @@ class Graph(tk.Frame):
         :param size: the point size in pixels
         :return: The absolute coordinates as a tuple
         """
-        xp = (self.px_x * (x - self.x_min)) / self.x_tick
-        yp = (self.px_y * (self.y_max - y)) / self.y_tick
+        xp = (self.pixX * (x - self.minX)) / self.xTicks
+        yp = (self.pixY * (self.yMax - y)) / self.yTicks
         coord = 50 + xp, 50 + yp
 
         if visible:
@@ -1450,7 +1670,7 @@ class Graph(tk.Frame):
 
         return coord
 
-    def plot_line(self, points: list, color="black", point_visibility=False):
+    def plotLine(self, points: list, color = "black", pointsVisible = False):
         """
         Plot a line of points
         :param points: a list of tuples, each tuple containing an (x, y) point
@@ -1460,14 +1680,13 @@ class Graph(tk.Frame):
         """
         last_point = ()
         for point in points:
-            this_point = self.plot_point(
-                point[0], point[1], color=color, visible=point_visibility
+            this_point = self.plotPoint(
+                point[0], point[1], color=color, visible=pointsVisible
             )
 
             if last_point:
                 self.canvas.create_line(last_point + this_point, fill=color)
             last_point = this_point
-            # print last_point
 
     @staticmethod
     def frange(start, stop, step, digits_to_round=3):
@@ -1482,7 +1701,109 @@ class Graph(tk.Frame):
         while start < stop:
             yield round(start, digits_to_round)
             start += step
+
+class ProgressBar(tk.Canvas):
+    '''
+    A progress bar that shows the value in a range
+    '''
+    
+    def __init__(self, start, end, value, width, height, padding = 10, cornerRadius = 10, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = "Arial 8", labelColor = (0, 0, 0), **args):
+        tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **args)
+        self.start = start
+        self.end = end
+        self.width = width
+        self.height = height
+        self.padding = padding
+        self.value = value
+        self.color = color
+        self.backgroundColor = backgroundColor
+        self.labelColor = labelColor
+        self.labelFont = labelFont
+        self.cornerRadius = cornerRadius
         
+        # Create background rect
+        bgPadMult = 0.7
+        self.background = RoundedRectangle(self, x = int(self.padding * bgPadMult), y = int(self.padding * bgPadMult), width = int(self.width - ((self.padding * bgPadMult) * 2)), height = int(self.height - ((self.padding * bgPadMult) * 2)), radius = self.cornerRadius, color = colorRGB(*self.backgroundColor))
+        self.background.draw()
+        
+        # Create background rounded rectangle
+        self.rect = RoundedRectangle(self, x = self.padding, y = self.padding, width = (self.width - self.padding * 2) * inverseLerp(self.value, self.start, self.end), height = self.height - self.padding * 2, radius = self.cornerRadius, color = colorRGB(*self.color))
+        self.rect.draw()
+        
+        # Create the text label
+        self.text = self.create_text(self.width / 2, self.height / 2, text = str(round(self.value, 1)) + "%")
+        self.itemconfig(self.text, font = self.labelFont, fill = colorRGB(*self.labelColor))
+        
+        self.pack(side = _pack_side)
+    
+    def setValue(self, newValue):
+        self.value = newValue
+        
+        # Resize bar
+        self.rect.resize((self.width * inverseLerp(self.value, self.start, self.end)) - self.padding * 2, self.height - self.padding * 2)
+        self.rect.draw()
+        
+        # Set text
+        self.itemconfig(self.text, text = str(round(self.value, 1)) + "%")
+        
+        # Keep the text on top
+        self.tag_raise(self.text)
+    
+    def getValue(self):
+        return self.value
+
+class Slider(tk.Canvas):
+    '''
+    A slider that can be dragged to change the value
+    '''
+    
+    def __init__(self, start, end, value, width, height, padding = 10, cornerRadius = 10, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = "Arial 8", labelColor = (0, 0, 0), **args):
+        tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **args)
+        self.start = start
+        self.end = end
+        self.width = width
+        self.height = height
+        self.padding = padding
+        self.value = value
+        self.color = color
+        self.backgroundColor = backgroundColor
+        self.labelColor = labelColor
+        self.labelFont = labelFont
+        self.cornerRadius = cornerRadius
+        
+        # Create background rect
+        bgPadMult = 0.7
+        self.background = RoundedRectangle(self, x = int(self.padding * bgPadMult), y = int(self.padding * bgPadMult), width = int(self.width - ((self.padding * bgPadMult) * 2)), height = int(self.height - ((self.padding * bgPadMult) * 2)), radius = self.cornerRadius, color = colorRGB(*self.backgroundColor))
+        self.background.draw()
+        
+        # Create background rounded rectangle
+        self.rect = RoundedRectangle(self, x = self.padding, y = self.padding, width = (self.width - self.padding * 2) * inverseLerp(self.value, self.start, self.end), height = self.height - self.padding * 2, radius = self.cornerRadius, color = colorRGB(*self.color))
+        self.rect.draw()
+        
+        # Create the text label
+        self.text = self.create_text(self.width / 2, self.height / 2, text = str(round(self.value, 1)) + "%")
+        self.itemconfig(self.text, font = self.labelFont, fill = colorRGB(*self.labelColor))
+        
+        self.bind
+        
+        self.pack(side = _pack_side)
+    
+    def setValue(self, newValue):
+        self.value = newValue
+        
+        # Resize bar
+        self.rect.resize((self.width * inverseLerp(self.value, self.start, self.end)) - self.padding * 2, self.height - self.padding * 2)
+        self.rect.draw()
+        
+        # Set text
+        self.itemconfig(self.text, text = str(round(self.value, 1)) + "%")
+        
+        # Keep the text on top
+        self.tag_raise(self.text)
+    
+    def getValue(self):
+        return self.value
+
 #region Shape graphics stuff
 class GraphicsObject:
     isDrawn = False
@@ -1650,9 +1971,10 @@ class RoundedRectangle(GraphicsObject):
         self.width = width
         self.height = height
         self.radius = radius
+        self.fillColor = color
 
     def _draw(self):
-        self.id = roundedRect(self.canvas, self.x, self.y, self.x + self.width, self.y + self.height, self.radius, fill = self.color)
+        self.id = roundedRect(self.canvas, self.x, self.y, self.x + self.width, self.y + self.height, self.radius, fill = self.fillColor)
     
     def shrink(self, x, y):
         self.width += x
@@ -1668,6 +1990,29 @@ class RoundedRectangle(GraphicsObject):
         self.width = width
         self.height = height
 
+def roundedRect(canvas, x1, y1, x2, y2, radius = 25, **kwargs):
+    points = [x1+radius, y1,
+              x1+radius, y1,
+              x2-radius, y1,
+              x2-radius, y1,
+              x2, y1,
+              x2, y1+radius,
+              x2, y1+radius,
+              x2, y2-radius,
+              x2, y2-radius,
+              x2, y2,
+              x2-radius, y2,
+              x2-radius, y2,
+              x1+radius, y2,
+              x1+radius, y2,
+              x1, y2,
+              x1, y2-radius,
+              x1, y2-radius,
+              x1, y1+radius,
+              x1, y1+radius,
+              x1, y1]
+
+    return canvas.create_polygon(points, **kwargs, smooth = True)
 #endregion
 
 # Adapted from: https://github.com/vednig/shadowTk
@@ -1867,30 +2212,6 @@ class Shadow(tk.Tk):
                         ff.configure(width = 1, height = y1-y0+ii*2-diff_size['u']-diff_size['d'])
                         ff.place(x = xx, y = y0-ii+1+diff_size['u'])
 
-def roundedRect(canvas, x1, y1, x2, y2, radius = 25, **kwargs):
-    points = [x1+radius, y1,
-              x1+radius, y1,
-              x2-radius, y1,
-              x2-radius, y1,
-              x2, y1,
-              x2, y1+radius,
-              x2, y1+radius,
-              x2, y2-radius,
-              x2, y2-radius,
-              x2, y2,
-              x2-radius, y2,
-              x2-radius, y2,
-              x1+radius, y2,
-              x1+radius, y2,
-              x1, y2,
-              x1, y2-radius,
-              x1, y2-radius,
-              x1, y1+radius,
-              x1, y1+radius,
-              x1, y1]
-
-    return canvas.create_polygon(points, **kwargs, smooth = True)
-
 #region The content in this region was adapted heavily from: https://github.com/Aboghazala/AwesomeTkinter
 class Tooltip:
     def __init__(self, widget, text, waitTime = 500, xOffset = 10, yOffset = 10, **kwargs):
@@ -2052,221 +2373,6 @@ class AutofitLabel(tk.Label):
         else:
             self['text'] = self.originalText
 
-class RadialProgressBar(tk.Frame):
-    """
-    A radial progress bar
-    
-    Basically this is a ttk horizontal progress bar modified using custom style layout and images
-    
-    Usage:
-        bar = RadialProgressBar(frame1, size = 150, fg = 'green')
-        bar.grid(padx = 10, pady = 10)
-        bar.start()
-    """
-
-    # class variables to be shared between objects
-    styles = []  # hold all style names created for all objects
-    imgs = {}  # imgs{"size":{"color": img}}  example: imgs{"100":{"red": img}}
-
-    def __init__(self, size = 100, bg = None, fg = 'cyan', text_fg = None, text_bg = None, font = None, font_size_ratio = 0.1,
-                base_img = None, indicator_img = None, parent_bg = None, **extra):
-        """
-        Initialize progress bar
-        
-        Args:
-            size (int or 2-tuple(int, int)) size of progressbar in pixels
-            bg (str): color of base ring
-            fg(str): color of indicator ring
-            text_fg (str): percentage text color
-            font (str): tkinter font for percentage text, e.g. 'any 20'
-            font_size_ratio (float): font size to progressbar width ratio, e.g. for a progressbar size 100 pixels,
-                                    a 0.1 ratio means font size 10
-            base_img (tk.PhotoImage): base image for progressbar
-            indicator_img (tk.PhotoImage): indicator image for progressbar
-            parent_bg (str): color of parent container (automatically set, but could be overridden)
-            extra: any extra kwargs
-        """
-
-        self.parent = _root
-        self.parent_bg = parent_bg or getWidgetAttribute(self.parent, 'background')
-        self.bg = bg or calculateContrastingColor(self.parent_bg, 30)
-        self.fg = fg
-        self.text_fg = text_fg or calculateFontColor(self.parent_bg)
-        self.text_bg = text_bg or self.parent_bg
-        self.size = size if isinstance(size, (list, tuple)) else (size, size)
-        self.font_size_ratio = font_size_ratio
-        self.font = font or f'any {int((sum(self.size) // 2) * self.font_size_ratio)}'
-
-        self.base_img = base_img
-        self.indicator_img = indicator_img
-
-        self.var = tk.IntVar()
-
-        # initialize super class
-        tk.Frame.__init__(self, master = _root)
-
-        # create custom progressbar style
-        self.bar_style = self.createStyle()
-
-        # create tk Progressbar
-        self.bar = ttk.Progressbar(self, orient = 'horizontal', mode = 'determinate', length = self.size[0],
-                                variable = self.var, style = self.bar_style)
-        self.bar.pack()
-
-        # percentage Label
-        self.percent_label = ttk.Label(self.bar, text = '0%')
-        self.percent_label.place(relx = 0.5, rely = 0.5, anchor = "center")
-
-        # trace progressbar value to show in label
-        self.var.trace_add('write', self.showPercentage)
-
-        # set default attributes
-        self.config(**extra)
-
-        self.start = self.bar.start
-        self.stop = self.bar.stop
-        
-        self.pack(side = _pack_side)
-
-    def set(self, value):
-        """set and validate progressbar value"""
-        value = self.validateValue(value)
-        self.var.set(value)
-
-    def get(self):
-        """get validated progressbar value"""
-        value = self.var.get()
-        return self.validateValue(value)
-
-    def validateValue(self, value):
-        """validate progressbar value
-        """
-
-        try:
-            value = int(value)
-            if value < 0:
-                value = 0
-            elif value > 100:
-                value = 100
-        except:
-            value = 0
-
-        return value
-
-    def createStyle(self):
-        """create ttk style for progressbar
-        style name is unique and will be stored in class variable "styles"
-        """
-
-        # create unique style name
-        bar_style = f'radial_progressbar_{len(RadialProgressBar.styles)}'
-
-        # add to styles list
-        RadialProgressBar.styles.append(bar_style)
-
-        # create style object
-        s = ttk.Style()
-
-        RadialProgressBar.imgs.setdefault(self.size, {})
-        self.indicator_img = self.indicator_img or RadialProgressBar.imgs[self.size].get(self.fg)
-        self.base_img = self.base_img or RadialProgressBar.imgs[self.size].get(self.bg)
-
-        if not self.indicator_img:
-            img = createCircle(self.size, color = self.fg)
-            self.indicator_img = PhotoImage(img)
-            RadialProgressBar.imgs[self.size].update(**{self.fg: self.indicator_img})
-
-        if not self.base_img:
-            img = createCircle(self.size, color = self.bg)
-            self.base_img = PhotoImage(img)
-            RadialProgressBar.imgs[self.size].update(**{self.bg: self.base_img})
-
-        # create elements
-        indicator_element = f'top_img_{bar_style}'
-        base_element = f'bottom_img_{bar_style}'
-
-        try:
-            s.element_create(base_element, 'image', self.base_img, border = 0, padding = 0)
-        except:
-            pass
-
-        try:
-            s.element_create(indicator_element, 'image', self.indicator_img, border = 0, padding = 0)
-        except:
-            pass
-
-        # create style layout
-        s.layout(bar_style,
-                [(base_element, {'children':
-                        [('pbar', {'side': 'left', 'sticky': 'nsew', 'children':
-                                [(indicator_element, {'sticky': 'nswe'})]})]})])
-
-        # configure new style
-        s.configure(bar_style, pbarrelief = 'flat', borderwidth = 0, troughrelief = 'flat')
-
-        return bar_style
-
-    def showPercentage(self, *args):
-        """display progressbar percentage in a label"""
-        bar_value = self.get()
-        self.percent_label.config(text = f'{bar_value}%')
-
-    def config(self, **kwargs):
-        """config widgets' parameters"""
-
-        # create style object
-        s = ttk.Style()
-
-        kwargs = {k: v for k, v in kwargs.items() if v}
-        self.__dict__.update(kwargs)
-
-        # frame bg
-        self['bg'] = self.parent_bg
-
-        # bar style configure
-        s.configure(self.bar_style, background = self.parent_bg, troughcolor = self.parent_bg)
-
-        # percentage label
-        self.percent_label.config(background = self.text_bg, foreground = self.text_fg, font = self.font)
-
-class ProgressBar(tk.Canvas):
-    def __init__(self, value = 0, range = 100, bg = None, fg = None, width = 100, height = 10):
-        master_bg = getWidgetAttribute(_root, 'background')
-        bg = bg or calculateContrastingColor(master_bg, 30)
-        self.fg = fg or calculateFontColor(bg)
-        self.height = height
-        self.width = width
-        super().__init__(_root, bg = bg, width = self.width, height = self.height, bd = 0, highlightthickness = 0)
-        self.bind('<Configure>', self._redraw)
-        self.pack(side = _pack_side)
-        
-        self.value = value
-        self.range = range
-        
-        self.background = self.create_rectangle(0, 0, self.range, self.height, fill = bg, width = 0)
-        self.bar = self.create_rectangle(0, 0, self.width * (self.value / self.range), self.height, fill = self.fg, width = 0)
-        self._redraw()
-
-    def setValue(self, value):
-        """Set the bar's value"""
-        self.value = value
-        self._redraw()
-
-    def setRange(self, range):
-        """Set the bar's range"""
-        self.range = range
-        self._redraw()
-
-    def _redraw(self, *args):
-        # in case the window gets resized by user
-        scale = self.winfo_width() / self.width
-        self.width = self.winfo_width()
-        
-        self.delete(self.bar)
-        self.bar = self.create_rectangle(0, 0, self.width * (self.value / self.range), self.height, fill = self.fg, width = 0)
-
-        self.update_idletasks()
-
 class ContextMenu(tk.Menu):
     """Context menu popup that appears on right click"""
 
@@ -2417,28 +2523,31 @@ def changeImageColor(img, new_color, old_color = None):
         pillow image
     """
 
-    # convert image to RGBA color scheme
-    img = img.convert('RGBA')
+    if hasPIL:
+        # convert image to RGBA color scheme
+        img = img.convert('RGBA')
 
-    # load pixels data
-    pixdata = img.load()
+        # load pixels data
+        pixdata = img.load()
 
-    # handle color
-    new_color = colorToRGBA(new_color)
-    old_color = colorToRGBA(old_color)
+        # handle color
+        new_color = colorToRGBA(new_color)
+        old_color = colorToRGBA(old_color)
 
-    for y in range(img.size[1]):
-        for x in range(img.size[0]):
-            alpha = pixdata[x, y][-1]
-            if old_color:
-                if pixdata[x, y]  ==  old_color:
+        for y in range(img.size[1]):
+            for x in range(img.size[0]):
+                alpha = pixdata[x, y][-1]
+                if old_color:
+                    if pixdata[x, y]  ==  old_color:
+                        r, g, b, _ = new_color
+                        pixdata[x, y] = (r, g, b, alpha)
+                else:
                     r, g, b, _ = new_color
                     pixdata[x, y] = (r, g, b, alpha)
-            else:
-                r, g, b, _ = new_color
-                pixdata[x, y] = (r, g, b, alpha)
 
-    return img
+        return img
+    else:
+        print("PIL not installed. Cannot set image from path.")
 
 def resizeImage(img, size, keep_aspect_ratio = True):
     """resize image using pillow
@@ -2450,42 +2559,49 @@ def resizeImage(img, size, keep_aspect_ratio = True):
         (PIL.Image): pillow image
     """
 
-    if isinstance(size, int):
-        size = (size, size)
+    if hasPIL:
+        if isinstance(size, int):
+            size = (size, size)
 
-    # get ratio
-    width, height = img.size
-    requested_width = size[0]
+        # get ratio
+        width, height = img.size
+        requested_width = size[0]
 
-    if keep_aspect_ratio:
-        ratio = width / requested_width
-        requested_height = height / ratio
+        if keep_aspect_ratio:
+            ratio = width / requested_width
+            requested_height = height / ratio
+        else:
+            requested_height = size[1]
+
+        size = (int(requested_width), int(requested_height))
+
+        img = img.resize(size, resample = PImage.Resampling.LANCZOS)
+
+        return img
     else:
-        requested_height = size[1]
-
-    size = (int(requested_width), int(requested_height))
-
-    img = img.resize(size, resample = PImage.Resampling.LANCZOS)
-
-    return img
+        print("PIL not installed. Cannot set image from path.")
 
 def mixImages(background_img, foreground_img):
-    """paste an image on top of another image
+    """Paste an image on top of another image
     Args:
         background_img: pillow image in background
         foreground_img: pillow image in foreground
     Returns:
         pillow image
     """
-    background_img = background_img.convert('RGBA')
-    foreground_img = foreground_img.convert('RGBA')
+    
+    if hasPIL:
+        background_img = background_img.convert('RGBA')
+        foreground_img = foreground_img.convert('RGBA')
 
-    img_w, img_h = foreground_img.size
-    bg_w, bg_h = background_img.size
-    offset = ((bg_w - img_w) // 2, (bg_h - img_h) // 2)
-    background_img.paste(foreground_img, offset, mask = foreground_img)
+        img_w, img_h = foreground_img.size
+        bg_w, bg_h = background_img.size
+        offset = ((bg_w - img_w) // 2, (bg_h - img_h) // 2)
+        background_img.paste(foreground_img, offset, mask = foreground_img)
 
-    return background_img
+        return background_img
+    else:
+        print("PIL not installed. Cannot set image from path.")
 
 def colorToRGBA(color):
     """Convert color names or hex notation to RGBA,
@@ -2546,14 +2662,6 @@ def calculateContrastingColor(color, offset):
 
     return rgbToHex(*new_color)
 
-def textToImage(text, text_color, bg_color, size):
-    """Not implemented"""
-    pass
-    # img = Image.new('RGBA', size, color_to_rgba(text_color))
-    # draw = ImageDraw.Draw(img)
-    # font = ImageFont.truetype(current_path + "s.ttf", size - int(0.15 * width))
-    # draw.text((pad, -pad), str(num), font = font, fill = color_to_rgba(bg_color))
-
 def createPILImage(fp = None, color = None, size = None, b64 = None):
     """
     A pillow Image object
@@ -2570,48 +2678,25 @@ def createPILImage(fp = None, color = None, size = None, b64 = None):
         pillow image object
     """
 
-    if not fp and b64:
-        fp = io.BytesIO(base64.b64decode(b64))
+    if hasPIL:
+        if not fp and b64:
+            fp = io.BytesIO(base64.b64decode(b64))
 
-    img = Image.open(fp)
+        img = Image.open(fp)
 
-    # change color
-    if color:
-        img = changeImageColor(img, color)
+        # change color
+        if color:
+            img = changeImageColor(img, color)
 
-    # resize
-    if size:
-        if isinstance(size, int):
-            size = (size, size)
-        img = resizeImage(img, size)
+        # resize
+        if size:
+            if isinstance(size, int):
+                size = (size, size)
+            img = resizeImage(img, size)
 
-    return img
-
-def createImage(fp = None, img = None, color = None, size = None, b64 = None):
-    """
-    A tkinter PhotoImage object that can modify size and color of original image
-    
-    Args:
-        fp: A filename (string), pathlib.Path object or a file object. The file object must implement read(), seek(),
-            and tell() methods, and be opened in binary mode.
-        img (pillow image): if exist fp or b64 arguments will be ignored
-        color (str): color in tkinter format, e.g. 'red', '#3300ff', also color can be a tuple or a list of RGB,
-                    e.g. (255, 0, 255)
-        size (int or 2-tuple(int, int)): an image required size in a (width, height) tuple
-        b64 (str): base64 hex representation of an image, if "fp" is given this parameter will be ignored
-    
-    Returns:
-        tkinter PhotoImage object
-    """
-    
-    # create pillow image
-    if not img:
-        img = createPILImage(fp, color, size, b64)
-
-    # create tkinter images using pillow ImageTk
-    img = PhotoImage(img)
-
-    return img
+        return img
+    else:
+        print("PIL not installed. Cannot set image from path.")
 
 def createCircle(size = 100, thickness = None, color = 'black', fill = None, antialias = 4, offset = 0):
     """
@@ -2630,46 +2715,49 @@ def createCircle(size = 100, thickness = None, color = 'black', fill = None, ant
     Returns:
         PIL image: a circle on a transparent image
     """
+    
+    if hasPIL:
+        if isinstance(size, int):
+            size = (size, size)
+        else:
+            size = size
 
-    if isinstance(size, int):
-        size = (size, size)
+        fill_color = colorToRGBA(fill) or '#0000'
+
+        requested_size = size
+
+        # calculate thickness to be 2% of circle diameter
+        thickness = thickness or max(size[0] * 2 // 100, 2)
+
+        offset = offset or thickness // 2
+
+        # make things bigger
+        size = [x * antialias for x in requested_size]
+        thickness *=  antialias
+
+        # create a transparent image with a big size
+        img = Image.new(size = size, mode = 'RGBA', color = '#0000')
+
+        draw = ImageDraw.Draw(img)
+
+        # draw circle with a required color
+        draw.ellipse([offset, offset, size[0] - offset, size[1] - offset], outline = color, fill = fill_color, width = thickness)
+
+        img = img.filter(ImageFilter.BLUR)
+
+        # resize image back to the requested size
+        img = img.resize(requested_size, Image.LANCZOS)
+
+        # change color again will enhance quality (weird)
+        if fill:
+            img = changeImageColor(img, color, old_color = color)
+            img = changeImageColor(img, fill, old_color = fill)
+        else:
+            img = changeImageColor(img, color)
+
+        return img
     else:
-        size = size
-
-    fill_color = colorToRGBA(fill) or '#0000'
-
-    requested_size = size
-
-    # calculate thickness to be 2% of circle diameter
-    thickness = thickness or max(size[0] * 2 // 100, 2)
-
-    offset = offset or thickness // 2
-
-    # make things bigger
-    size = [x * antialias for x in requested_size]
-    thickness *=  antialias
-
-    # create a transparent image with a big size
-    img = Image.new(size = size, mode = 'RGBA', color = '#0000')
-
-    draw = ImageDraw.Draw(img)
-
-    # draw circle with a required color
-    draw.ellipse([offset, offset, size[0] - offset, size[1] - offset], outline = color, fill = fill_color, width = thickness)
-
-    img = img.filter(ImageFilter.BLUR)
-
-    # resize image back to the requested size
-    img = img.resize(requested_size, Image.LANCZOS)
-
-    # change color again will enhance quality (weird)
-    if fill:
-        img = changeImageColor(img, color, old_color = color)
-        img = changeImageColor(img, fill, old_color = fill)
-    else:
-        img = changeImageColor(img, color)
-
-    return img
+        print("PIL not installed. Cannot set image from path.")
 
 def applyGradient(img, gradient = 'vertical', colors = None, keep_transparency = True):
     """
@@ -2680,70 +2768,73 @@ def applyGradient(img, gradient = 'vertical', colors = None, keep_transparency =
         colors (iterable): 2-colors for the gradient
         keep_transparency (bool): keep original transparency
     """
+    
+    if hasPIL:
+        size = img.size
+        colors = colors or ['black', 'white']
+        color1 = colorToRGBA(colors[0])
+        color2 = colorToRGBA(colors[1])
 
-    size = img.size
-    colors = colors or ['black', 'white']
-    color1 = colorToRGBA(colors[0])
-    color2 = colorToRGBA(colors[1])
+        # load pixels data
+        pixdata = img.load()
 
-    # load pixels data
-    pixdata = img.load()
+        if gradient in ('horizontal', 'vertical', 'diagonal'):
 
-    if gradient in ('horizontal', 'vertical', 'diagonal'):
+            for x in range(0, size[0]):
+                for y in range(0, size[1]):
 
-        for x in range(0, size[0]):
-            for y in range(0, size[1]):
+                    if gradient  ==  'horizontal':
+                        ratio1 = x / size[1]
+                    elif gradient  ==  'vertical':
+                        ratio1 = y / size[1]
+                    elif gradient  ==  'diagonal':
+                        ratio1 = (y + x) / size[1]
 
-                if gradient  ==  'horizontal':
-                    ratio1 = x / size[1]
-                elif gradient  ==  'vertical':
-                    ratio1 = y / size[1]
-                elif gradient  ==  'diagonal':
-                    ratio1 = (y + x) / size[1]
+                    ratio2 = 1 - ratio1
 
-                ratio2 = 1 - ratio1
+                    r = ratio1 * color2[0] + ratio2 * color1[0]
+                    g = ratio1 * color2[1] + ratio2 * color1[1]
+                    b = ratio1 * color2[2] + ratio2 * color1[2]
 
-                r = ratio1 * color2[0] + ratio2 * color1[0]
-                g = ratio1 * color2[1] + ratio2 * color1[1]
-                b = ratio1 * color2[2] + ratio2 * color1[2]
+                    if keep_transparency:
+                        a = pixdata[x, y][-1]
+                    else:
+                        a = ratio1 * color2[3] + ratio2 * color1[3]
 
-                if keep_transparency:
-                    a = pixdata[x, y][-1]
-                else:
-                    a = ratio1 * color2[3] + ratio2 * color1[3]
+                    r, g, b, a = (int(x) for x in (r, g, b, a))
 
-                r, g, b, a = (int(x) for x in (r, g, b, a))
+                    # Place the pixel
+                    img.putpixel((x, y), (r, g, b, a))
 
-                # Place the pixel
-                img.putpixel((x, y), (r, g, b, a))
+        elif gradient  ==  'radial':  # inspired by https://stackoverflow.com/a/30669765
+            d = min(size)
+            radius = d // 2
 
-    elif gradient  ==  'radial':  # inspired by https://stackoverflow.com/a/30669765
-        d = min(size)
-        radius = d // 2
+            for x in range(0, size[0]):
+                for y in range(0, size[1]):
 
-        for x in range(0, size[0]):
-            for y in range(0, size[1]):
+                    # Find the distance to the center
+                    distance_to_center = math.sqrt((x - size[0] / 2) ** 2 + (y - size[1] / 2) ** 2)
 
-                # Find the distance to the center
-                distance_to_center = math.sqrt((x - size[0] / 2) ** 2 + (y - size[1] / 2) ** 2)
+                    ratio1 = distance_to_center / radius
+                    ratio2 = 1 - ratio1
 
-                ratio1 = distance_to_center / radius
-                ratio2 = 1 - ratio1
+                    r = ratio1 * color2[0] + ratio2 * color1[0]
+                    g = ratio1 * color2[1] + ratio2 * color1[1]
+                    b = ratio1 * color2[2] + ratio2 * color1[2]
 
-                r = ratio1 * color2[0] + ratio2 * color1[0]
-                g = ratio1 * color2[1] + ratio2 * color1[1]
-                b = ratio1 * color2[2] + ratio2 * color1[2]
+                    if keep_transparency:
+                        a = pixdata[x, y][-1]
+                    else:
+                        a = ratio1 * color2[3] + ratio2 * color1[3]
+                    r, g, b, a = (int(x) for x in (r, g, b, a))
 
-                if keep_transparency:
-                    a = pixdata[x, y][-1]
-                else:
-                    a = ratio1 * color2[3] + ratio2 * color1[3]
-                r, g, b, a = (int(x) for x in (r, g, b, a))
+                    # Place the pixel
+                    img.putpixel((x, y), (r, g, b, a))
 
-                # Place the pixel
-                img.putpixel((x, y), (r, g, b, a))
-
-    return img
+        return img
+    else:
+        print("PIL not installed. Cannot set image from path.")
 
 def scrollWithMouseWheel(widget, target = None, modifier = 'Shift', apply_to_children = False):
     """scroll a widget with mouse wheel
@@ -2972,7 +3063,7 @@ def fastInverseSqrt(number):
     return y
 #endregion
 
-if __name__ == "__main__":    
+if __name__ == "__main__":
     win = DEGraphWin("This is a window")
     with win:
 
@@ -3143,19 +3234,19 @@ if __name__ == "__main__":
         Label("Graph:")
         with Stack():
             graph = Graph(
-                x_min=-1.0,
-                x_max=1.0,
-                y_min=0.0,
-                y_max=2.0,
-                x_tick=0.2,
-                y_tick=0.2,
+                minX=-1.0,
+                maxX=1.0,
+                minY=0.0,
+                maxY=2.0,
+                xTicks=0.2,
+                yTicks=0.2,
                 width=500,
                 height=400
             )
             graph.grid(row=0, column=0)
             # create an initial line
             line_0 = [(x/10, x/10) for x in range(10)]
-            graph.plot_line(line_0)
+            graph.plotLine(line_0)
     
         Label("Image: ")
         Image(100, 100, "Screenshot 2022-10-20 113914.png")
@@ -3165,29 +3256,3 @@ if __name__ == "__main__":
             plt = Plot(100, 100, colorRGB(10, 100, 60))
         for i in range(100):
             plt.plot(i, 10, (255, 0, 0))
-        
-        # with ScrollableFrame():
-        # 	# with Stack():
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")
-        # 	Label("3D frame")

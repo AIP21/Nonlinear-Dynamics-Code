@@ -313,113 +313,136 @@ class ThreadWithReturnValue(threading.Thread):
 
 win = DEGraphWin("Mandlebrot's Set Visualizer", width = renderSize[0], height = renderSize[1])
 
-# Compute the mandlebrot's set
-print("Computing the mandlebrot's set")
-startTime = time.time()
-
-# Calculate mandlebrot's set into an array using numpy, using vEcToRiZaTiOn
-rMin = mandlebrotCustomCoords[0]
-rMax = mandlebrotCustomCoords[2]
-iMin = mandlebrotCustomCoords[1]
-iMax = mandlebrotCustomCoords[3]
-
-# Create ALL the x and y values
-x,y = np.ogrid[rMin:rMax:renderSize[0] * 1j, iMin:iMax:renderSize[1] * 1j]
-
-# Create ALL the complex numbers
-c = x + (y * 1j)
-
-# Initialize z to ALL be zero
-z = np.zeros(c.shape, dtype = np.complex128)
-
-# Keep track of which points did not converge so far
-m = np.full(c.shape, True, dtype = bool)
-
-# Keep track in which iteration the points diverged
-divergenceTimes = mandlebrotIterations + np.zeros(z.shape, dtype = int)
-
-for i in range(mandlebrotIterations):
-    # Iterate
-    z[m] = z[m] ** 2 + c[m]
-    
-    # Find diverging
-    diverging = np.greater(np.abs(z), 2, out = np.full(c.shape, False), where = m)
-
-    # Find which diverged in this iteration
-    diverged = np.logical_and(diverging, m)
-    
-    # Remember which have diverged
-    m[np.abs(z) > 2] = False
-    
-    # Remember when they diverged
-    divergenceTimes[diverged] = i
-
-diff = time.time() - startTime
-print("Finished computing the mandlebrot's set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")
-
-start = time.time()
-
-pixelObjects = []
-
-win.plot(0, 0, 'red')
-win.plot(10, 10, 'green')
-win.plot(125, 125, 'blue')
-
 sweeps = 4
 
-for sweep in range(sweeps):
-    x = sweep
-    totalPix = 0
-    time2 = time.time()
+with win:
+    # frame = Plot(width = renderSize[0], height = renderSize[1])
     
-    totalLoop = 0
+    mandlebrotProgress = ProgressBar(0, 100, 0, width = renderSize[0], height = 30)
+    mandlebrotProgress.setValue(50)
     
-    # Go through every x value, with a step of sweeps
-    while x < renderSize[0]:
-        startLoop = time.time()
+    def sweepy():
+        sweeps = sweepsEntry.value
+        print("sweepy: " + str(sweeps))
+     
+    Label("Render sweeps (default = 4): ")
+    sweepsEntry = Spinner(value = sweeps, to = 64, command = sweepy, width = renderSize[0])
+    # self.sweepsEntry.value = self.renderSweeps
+    Tooltip(sweepsEntry, "The number of threads to use for computing the mandlebrot set and julia set. (Default: 16) Warning: Setting this too high may cause your computer to lag!")
+    
+
+#     # Compute the mandlebrot's set
+#     print("Computing the mandlebrot's set")
+#     startTime = time.time()
+
+#     # Calculate mandlebrot's set into an array using numpy, using vEcToRiZaTiOn
+#     rMin = mandlebrotCustomCoords[0]
+#     rMax = mandlebrotCustomCoords[2]
+#     iMin = mandlebrotCustomCoords[1]
+#     iMax = mandlebrotCustomCoords[3]
+
+#     # Create ALL the x and y values
+#     x,y = np.ogrid[rMin:rMax:renderSize[0] * 1j, iMin:iMax:renderSize[1] * 1j]
+
+#     # Create ALL the complex numbers
+#     c = x + (y * 1j)
+
+#     # Initialize z to ALL be zero
+#     z = np.zeros(c.shape, dtype = np.complex128)
+
+#     # Keep track of which points did not converge so far
+#     m = np.full(c.shape, True, dtype = bool)
+
+#     # Keep track in which iteration the points diverged
+#     divergenceTimes = mandlebrotIterations + np.zeros(z.shape, dtype = int)
+
+#     for i in range(mandlebrotIterations):
+#         # Iterate
+#         z[m] = z[m] ** 2 + c[m]
         
-        # Go through every y value
-        for y in range(renderSize[1]):
-            val = divergenceTimes[x][y]
+#         # Find diverging
+#         diverging = np.greater(np.abs(z), 2, out = np.full(c.shape, False), where = m)
+
+#         # Find which diverged in this iteration
+#         diverged = np.logical_and(diverging, m)
+        
+#         # Remember which have diverged
+#         m[np.abs(z) > 2] = False
+        
+#         # Remember when they diverged
+#         divergenceTimes[diverged] = i
+
+#     diff = time.time() - startTime
+#     print("Finished computing the mandlebrot's set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")
+    
+#     print("drawing")
+#     startTime = time.time()
+
+#     pixelObjects = []
+
+#     frame.plot(0, 0, 'red')
+#     frame.plot(10, 10, 'green')
+#     frame.plot(125, 125, 'blue')
+#     frame.refresh()
+
+#     sweeps = 4
+        
+    # for sweep in range(sweeps):
+    #     x = sweep
+    #     totalPix = 0
+    #     time2 = time.time()
+        
+    #     totalLoop = 0
+        
+    #     # Go through every x value, with a step of sweeps
+    #     while x < renderSize[0]:
+    #         startLoop = time.time()
             
-            if mandlebrotDrawMethod == 1:
-                if val == mandlebrotIterations:
-                    # Threshold coloring
-                    timey = time.time()
-                    win.plot(x, y, 'black')
-                    totalPix += time.time() - timey
-            elif mandlebrotDrawMethod == 2:
-                if val != mandlebrotIterations:
-                    # Gradient coloring
-                    pixelObjects.append(win.plot(x, y, colorRGB(*getGradientColor(val / mandlebrotIterations, colorMap))))
-            elif mandlebrotDrawMethod == 3:
-                if val != mandlebrotIterations:
-                    # Weird coloring
-                    pixelObjects.append(win.plot(x, y, colorRGB(val + 1 - np.log(np.log(np.abs(z[x][y]))) / np.log(2))))
-            elif mandlebrotDrawMethod == 4:
-                if val != mandlebrotIterations:
-                    # Gaussian coloring
-                    pixelObjects.append(win.plot(x, y, colorRGB(gaussian(val, 0, 0, 1))))
-            elif mandlebrotDrawMethod == 5:
-                if val != mandlebrotIterations:
-                    # Random coloring
-                    pixelObjects.append(win.plot(x, y, colorRGB(*np.random.randint(0, 255, 3))))
+    #         # Go through every y value
+    #         for y in range(renderSize[1]):
+    #             val = divergenceTimes[x][y]
+                
+    #             if mandlebrotDrawMethod == 1:
+    #                 if val == mandlebrotIterations:
+    #                     # Threshold coloring
+    #                     timey = time.time()
+    #                     frame.plot(x, y, 'black')
+    #                     totalPix += time.time() - timey
+    #             elif mandlebrotDrawMethod == 2:
+    #                 if val != mandlebrotIterations:
+    #                     # Gradient coloring
+    #                     pixelObjects.append(frame.plot(x, y, colorRGB(*getGradientColor(val / mandlebrotIterations, colorMap))))
+    #             elif mandlebrotDrawMethod == 3:
+    #                 if val != mandlebrotIterations:
+    #                     # Weird coloring
+    #                     pixelObjects.append(frame.plot(x, y, colorRGB(val + 1 - np.log(np.log(np.abs(z[x][y]))) / np.log(2))))
+    #             elif mandlebrotDrawMethod == 4:
+    #                 if val != mandlebrotIterations:
+    #                     # Gaussian coloring
+    #                     pixelObjects.append(frame.plot(x, y, colorRGB(gaussian(val, 0, 0, 1))))
+    #             elif mandlebrotDrawMethod == 5:
+    #                 if val != mandlebrotIterations:
+    #                     # Random coloring
+    #                     pixelObjects.append(frame.plot(x, y, colorRGB(*np.random.randint(0, 255, 3))))
+            
+    #         x += sweeps #renderSize[0] / sweeps
+            
+    #         totalLoop += time.time() - startLoop
         
-        x += sweeps #renderSize[0] / sweeps
+    #     # Print average times
+    #     print("Average pixel time: " + str((totalPix / (renderSize[0] * renderSize[1])) * 1000) + "ms")
+    #     print("Total pixel time: " + str(totalPix * 1000) + "ms")
+    #     print("Average y loop time: " + str((totalLoop / renderSize[0]) * 1000) + "ms")
+    #     print("Total loop time: " + str(totalLoop * 1000) + "ms")
         
-        totalLoop += time.time() - startLoop
-    
-    # Print average times
-    print("Average pixel time: " + str((totalPix / (renderSize[0] * renderSize[1])) * 1000) + "ms")
-    print("Total pixel time: " + str(totalPix * 1000) + "ms")
-    print("Average y loop time: " + str((totalLoop / renderSize[0]) * 1000) + "ms")
-    print("Total loop time: " + str(totalLoop * 1000) + "ms")
-    
-    print("X SWEEP: " + str(sweep))
-    
+    #     print("X SWEEP: " + str(sweep))
+        
+    #     win.update()
+
+    # frame.update()
     win.update()
 
-diff = time.time() - startTime
-print("Finished drawing the set set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")
+    # diff = time.time() - startTime
+    # print("Finished drawing the set set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")
 
 win.mainloop()
