@@ -375,7 +375,7 @@ class Slot(tk.Frame):
         self._pack_side_old = _pack_side
         tk.Frame.__init__(self, self._root_old, **self.kw)
         self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0)
-        self.pack( side = self._pack_side_old, fill = tk.X)
+        self.pack(side = self._pack_side_old, fill = tk.X)
         _root = self
     
     def __exit__(self, type, value, traceback):
@@ -419,7 +419,7 @@ class Stack(Slot):
         Slot.__enter__(self)
         _pack_side = TOP
         return _root
-        
+
 class Flow(Slot):
     def __init__(self, align = LEFT, **kw):
         Slot.__init__(self, **kw)
@@ -430,6 +430,17 @@ class Flow(Slot):
         Slot.__enter__(self)
         _pack_side = self.align
         return _root
+
+class Separator(tk.Canvas):
+    def __init__(self, width, height, horizontalSpacing, verticalSpacing, color = (100, 100, 100), **kw):
+        self.kw = kw
+        tk.Canvas.__init__(self, _root, width = width + horizontalSpacing * 2, height = height + verticalSpacing * 2, **self.kw)
+        self.color = color
+        
+        rect = Rectangle(self, horizontalSpacing, verticalSpacing, width, height, color = colorRGB(*self.color), outline = colorRGB(*self.color))
+        rect.draw()
+        
+        self.pack(side = _pack_side)
 
 class Button(tk.Canvas):
     """
@@ -619,7 +630,7 @@ class Label(tk.Label):
         padx, pady, relief, takefocus, text,
         textvariable, underline, wraplength
     '''
-    def __init__(self, text = "", color = "black", font = "Arial 10 bold", **kw):
+    def __init__(self, text = "", color = "black", font = "Arial 10", **kw):
         self.kw   = kw
         self.textvariable = tk.StringVar()
         self.textvariable.set(self.kw['text'] if 'text' in self.kw else text)
@@ -1059,7 +1070,7 @@ class RadioButtonGroup(object):
     @number.setter
     def number(self, n):
         self.IntVar.set(n)
-        
+
 class Spinner(tk.Spinbox):
     def __init__(self, **kw):
         tk.Spinbox.__init__(self, _root, relief = "flat", **kw)
@@ -1142,7 +1153,7 @@ class ListBox(tk.Listbox):
         self.pack(side = _pack_side)
         for item in values:
             self.insert(tk.END, item)
-            
+    
     @property
     def selection(self):
         return self.curselection()[0]
@@ -1152,7 +1163,7 @@ class ScrollableFrame(tk.Frame):
     A frame that you can scroll through
     
     Usage:
-        with ScrollableFrame(root):
+        with ScrollableFrame():
             # add your widgets here
     """
     
@@ -1627,25 +1638,25 @@ class Graph(tk.Frame):
         for x in self.frange(0, self.maxX - self.minX + 1, self.xTicks):
             value = Decimal(self.minX + x)
             if self.minX <= value <= self.maxX:
-                x_step = (self.pixX * x) / self.xTicks
-                coord = 50 + x_step, self.h - 50, 50 + x_step, self.h - 45
-                self.canvas.create_line(coord, fill="black")
-                coord = 50 + x_step, self.h - 40
+                xStep = (self.pixX * x) / self.xTicks
+                coord = 50 + xStep, self.h - 50, 50 + xStep, self.h - 45
+                self.canvas.create_line(coord, fill = "black")
+                coord = 50 + xStep, self.h - 40
 
                 label = round(Decimal(self.minX + x), 1)
-                self.canvas.create_text(coord, fill="black", text=label)
+                self.canvas.create_text(coord, fill = "black", text = label)
 
         for y in self.frange(0, self.yMax - self.yMin + 1, self.yTicks):
             value = Decimal(self.yMax - y)
 
             if self.yMin <= value <= self.yMax:
-                y_step = (self.pixY * y) / self.yTicks
-                coord = 45, 50 + y_step, 50, 50 + y_step
-                self.canvas.create_line(coord, fill="black")
-                coord = 35, 50 + y_step
+                yStep = (self.pixY * y) / self.yTicks
+                coord = 45, 50 + yStep, 50, 50 + yStep
+                self.canvas.create_line(coord, fill = "black")
+                coord = 35, 50 + yStep
 
                 label = round(value, 1)
-                self.canvas.create_text(coord, fill="black", text=label)
+                self.canvas.create_text(coord, fill = "black", text = label)
 
     def plotPoint(self, x, y, visible = True, color = "black", size = 5):
         """
@@ -1666,7 +1677,7 @@ class Graph(tk.Frame):
             size = int(size / 2) if int(size / 2) > 1 else 1
             x, y = coord
 
-            self.canvas.create_oval(x - size, y - size, x + size, y + size, fill=color)
+            self.canvas.create_oval(x - size, y - size, x + size, y + size, fill = color)
 
         return coord
 
@@ -1678,18 +1689,16 @@ class Graph(tk.Frame):
         :param point_visibility: True if the points should be individually visible
         :return: None
         """
-        last_point = ()
+        lastPt = ()
         for point in points:
-            this_point = self.plotPoint(
-                point[0], point[1], color=color, visible=pointsVisible
-            )
+            pt = self.plotPoint(point[0], point[1], color = color, visible = pointsVisible)
 
-            if last_point:
-                self.canvas.create_line(last_point + this_point, fill=color)
-            last_point = this_point
+            if lastPt:
+                self.canvas.create_line(lastPt + pt, fill=color)
+            lastPt = pt
 
     @staticmethod
-    def frange(start, stop, step, digits_to_round=3):
+    def frange(start, stop, step, digitsToRound = 3):
         """
         Works like range for doubles
         :param start: starting value
@@ -1699,7 +1708,7 @@ class Graph(tk.Frame):
         :return: generator
         """
         while start < stop:
-            yield round(start, digits_to_round)
+            yield round(start, digitsToRound)
             start += step
 
 class ProgressBar(tk.Canvas):
@@ -1707,7 +1716,7 @@ class ProgressBar(tk.Canvas):
     A progress bar that shows the value in a range
     '''
     
-    def __init__(self, start, end, value, width, height, padding = 10, cornerRadius = 10, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = "Arial 8", labelColor = (0, 0, 0), **args):
+    def __init__(self, start, end, value, width, height, suffix = "", padding = 10, cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = "Arial 8 bold", labelColor = (255, 255, 255), **args):
         tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **args)
         self.start = start
         self.end = end
@@ -1720,18 +1729,21 @@ class ProgressBar(tk.Canvas):
         self.labelColor = labelColor
         self.labelFont = labelFont
         self.cornerRadius = cornerRadius
+        self.suffix = suffix
         
         # Create background rect
         bgPadMult = 0.7
         self.background = RoundedRectangle(self, x = int(self.padding * bgPadMult), y = int(self.padding * bgPadMult), width = int(self.width - ((self.padding * bgPadMult) * 2)), height = int(self.height - ((self.padding * bgPadMult) * 2)), radius = self.cornerRadius, color = colorRGB(*self.backgroundColor))
         self.background.draw()
         
-        # Create background rounded rectangle
-        self.rect = RoundedRectangle(self, x = self.padding, y = self.padding, width = (self.width - self.padding * 2) * inverseLerp(self.value, self.start, self.end), height = self.height - self.padding * 2, radius = self.cornerRadius, color = colorRGB(*self.color))
-        self.rect.draw()
+        # Create progress bar track
+        self.track = RoundedRectangle(self, x = self.padding, y = self.padding, width = (self.width - self.padding * 2) * inverseLerp(self.value, self.start, self.end), height = self.height - self.padding * 2, radius = self.cornerRadius, color = colorRGB(*self.color))
+        
+        if self.value != 0:
+            self.track.draw()
         
         # Create the text label
-        self.text = self.create_text(self.width / 2, self.height / 2, text = str(round(self.value, 1)) + "%")
+        self.text = self.create_text(self.width / 2, self.height / 2, text = str(round(self.value, 1)) + self.suffix)
         self.itemconfig(self.text, font = self.labelFont, fill = colorRGB(*self.labelColor))
         
         self.pack(side = _pack_side)
@@ -1740,11 +1752,15 @@ class ProgressBar(tk.Canvas):
         self.value = newValue
         
         # Resize bar
-        self.rect.resize((self.width * inverseLerp(self.value, self.start, self.end)) - self.padding * 2, self.height - self.padding * 2)
-        self.rect.draw()
+        # If the value is 0 then hide the track
+        if self.value == 0:
+            self.track.undraw()
+        else:
+            self.track.resize((self.width * inverseLerp(self.value, self.start, self.end)) - self.padding * 2, self.height - self.padding * 2)
+            self.track.draw()
         
         # Set text
-        self.itemconfig(self.text, text = str(round(self.value, 1)) + "%")
+        self.itemconfig(self.text, text = str(round(self.value, 1)) + self.suffix)
         
         # Keep the text on top
         self.tag_raise(self.text)
@@ -1754,10 +1770,15 @@ class ProgressBar(tk.Canvas):
 
 class Slider(tk.Canvas):
     '''
-    A slider that can be dragged to change the value
+    A slider that can be dragged to change the value. It also has a label to show it's current value.
+    
+    You can change the step, min and max value, and label suffix
     '''
     
-    def __init__(self, start, end, value, width, height, padding = 10, cornerRadius = 10, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = "Arial 8", labelColor = (0, 0, 0), **args):
+    disabled = False
+    mouseOver = False
+    
+    def __init__(self, start, end, value, width, height, step = 0, suffix = "", padding = [20, 10], cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = "Arial 8 bold", labelColor = (255, 255, 255), **args):
         tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **args)
         self.start = start
         self.end = end
@@ -1765,57 +1786,175 @@ class Slider(tk.Canvas):
         self.height = height
         self.padding = padding
         self.value = value
+        self.step = step
         self.color = color
+        self.suffix = suffix
         self.backgroundColor = backgroundColor
         self.labelColor = labelColor
         self.labelFont = labelFont
         self.cornerRadius = cornerRadius
+        self.thumbRadius = cornerRadius / 2
+        
+        # Local pixel minimum and maximum
+        self.min = self.padding[0]
+        self.max = self.width - self.padding[0]
         
         # Create background rect
-        bgPadMult = 0.7
-        self.background = RoundedRectangle(self, x = int(self.padding * bgPadMult), y = int(self.padding * bgPadMult), width = int(self.width - ((self.padding * bgPadMult) * 2)), height = int(self.height - ((self.padding * bgPadMult) * 2)), radius = self.cornerRadius, color = colorRGB(*self.backgroundColor))
+        bgPaddingX = self.padding[0] * 0.8
+        bgPaddingY = self.padding[1] * 0.7
+        self.background = RoundedRectangle(self, x = bgPaddingX, y = bgPaddingY, width = self.width - bgPaddingX * 2, height = self.height - bgPaddingY * 2, radius = self.cornerRadius, color = colorRGB(*self.backgroundColor))
         self.background.draw()
         
-        # Create background rounded rectangle
-        self.rect = RoundedRectangle(self, x = self.padding, y = self.padding, width = (self.width - self.padding * 2) * inverseLerp(self.value, self.start, self.end), height = self.height - self.padding * 2, radius = self.cornerRadius, color = colorRGB(*self.color))
-        self.rect.draw()
+        # Create slider track
+        self.track = RoundedRectangle(self, x = self.min, y = self.padding[1], width = self.convertToPixel(self.value) - self.thumbRadius, height = self.height - self.padding[1] * 2, radius = self.cornerRadius * (2 / 3), color = colorRGB(*self.color))
+        
+        if self.value != 0:
+            self.track.draw()
+        
+        # Create the thumb
+        self.thumb = Ellipse(self, x = self.convertToPixel(self.value) - self.thumbRadius, y = (self.height / 2) - self.thumbRadius, width = self.thumbRadius * 2, height = self.thumbRadius * 2, color = colorRGB(*self.color))
+        self.thumb.draw()
         
         # Create the text label
-        self.text = self.create_text(self.width / 2, self.height / 2, text = str(round(self.value, 1)) + "%")
+        self.text = self.create_text(self.width / 2, self.height / 2, text = str(round(self.value, 1)) + self.suffix)
         self.itemconfig(self.text, font = self.labelFont, fill = colorRGB(*self.labelColor))
-        
-        self.bind
-        
+                
         self.pack(side = _pack_side)
+        
+        self.dragFunc = None
+        
+        # Bind inputs
+        self.bind("<B1-Motion>", self.dragClick)
+        self.bind("<ButtonRelease-1>", self.onClickUp)
+        self.bind('<Enter>', self.hoverEnter)
+        self.bind('<Leave>', self.hoverExit)
+
+    def hoverEnter(self, event):
+        self.mouseOver = True
+        
+        if self.disabled:
+            return
+        
+        # Darken the rect and thumb
+        self.track.color = colorRGB(self.color[0] - 25, self.color[1] - 25, self.color[2] - 25)
+        self.track.draw()
+        self.thumb.color = colorRGB(self.color[0] - 25, self.color[1] - 25, self.color[2] - 25)
+        self.thumb.draw()
+            
+    def hoverExit(self, event):
+        self.mouseOver = False
+        
+        if self.disabled:
+            return
+        
+        # Return the rect and thumb color to normal
+        self.track.color = colorRGB(*self.color)
+        self.track.draw()
+        self.thumb.color = colorRGB(*self.color)
+        self.thumb.draw()
+
+    def onClickUp(self, event):
+        # Set the value
+        self.setValue(self.convertToLocal(event.x))
+        
+        # Call change function
+        if self.dragFunc != None:
+            self.dragFunc(event)
+    
+    def dragClick(self, event):
+        if self.disabled:
+            return
+        
+        # Set the value
+        self.setValue(self.convertToLocal(event.x))
+        
+        # Call change function
+        if self.dragFunc != None:
+            self.dragFunc(event)
+    
+    # Convert a pixel coordinate into this slider's range and using the step value (clamped)
+    def convertToLocal(self, x):
+        if self.step == 0:
+            return remap(clamp(x, self.min, self.max), self.min, self.max, self.start, self.end)
+        else:
+            return round(remap(clamp(x, self.min, self.max), self.min, self.max, self.start, self.end), self.step - 1)
+    
+    # Convert a local value into pixel coordinates
+    def convertToPixel(self, value):
+        return remap(value, self.start, self.end, self.min, self.max)
     
     def setValue(self, newValue):
         self.value = newValue
+        self.valuePix = self.convertToPixel(self.value)
         
-        # Resize bar
-        self.rect.resize((self.width * inverseLerp(self.value, self.start, self.end)) - self.padding * 2, self.height - self.padding * 2)
-        self.rect.draw()
+        # Resize slider bar
+        # If the value is 0 then hide the track
+        if self.value == 0:
+            self.track.undraw()
+        else:
+            self.track.resize(self.valuePix - self.thumbRadius, self.height - self.padding[1] * 2)
+            self.track.draw()
         
         # Set text
-        self.itemconfig(self.text, text = str(round(self.value, 1)) + "%")
+        self.itemconfig(self.text, text = str(round(self.value, 1)) + self.suffix)
+        
+        # Set thumb position
+        self.thumb.setPos(self.convertToPixel(self.value) - self.thumbRadius, (self.height / 2) - self.thumbRadius)
         
         # Keep the text on top
         self.tag_raise(self.text)
     
     def getValue(self):
         return self.value
+    
+    def setInputCallback(self, func):
+        '''
+        Set the function to call when the user drags the slider
+        
+        Args:
+            func: The function to call
+        '''
+        self.dragFunc = func
+    
+    def enable(self):
+        self.disabled = False
+        
+        # Make the slider color
+        self.track.setColor(colorRGB(*self.color))
+        
+        # Show the thumb
+        self.thumb.draw()
+    
+    def disable(self):
+        self.disabled = True
+        
+        # Make the slider gray
+        self.track.setColor(colorRGB(150, 150, 150))
+        
+        # Hide the thumb
+        self.thumb.undraw()
 
 #region Shape graphics stuff
 class GraphicsObject:
     isDrawn = False
     
-    def __init__(self, canvas, x, y, color):
+    def __init__(self, canvas, x, y, color, outline):
         self.canvas = canvas
         self.x = x
         self.y = y
+        
         if type(color) == str:
             self.color = color
         else:
             self.color = colorRGB(*color)
+        
+        if outline == None:
+            self.outline = None
+        elif type(outline) == str:
+            self.outline = outline
+        else:
+            self.outline = colorRGB(*outline)
+        
         self.id = None
 
     def draw(self):
@@ -1834,6 +1973,9 @@ class GraphicsObject:
         if self.isDrawn:
             self.canvas.delete(self.id)
             self.isDrawn = False
+    
+    def setPos(self, x, y):
+        self.move(x - self.x, y - self.y)
 
     def move(self, dx, dy):
         self.x += dx
@@ -1846,27 +1988,41 @@ class GraphicsObject:
     
     def setColor(self, color):
         self.color = color
+    
+    def setOutline(self, outline):
+        self.outline = outline
 
 # Rectangle
 class Rectangle(GraphicsObject):
-    def __init__(self, canvas, x, y, width, height, color):
-        super().__init__(canvas, x, y, color)
+    def __init__(self, canvas, x, y, width, height, color, outline):
+        super().__init__(canvas, x, y, color, outline)
         self.width = width
         self.height = height
 
     def _draw(self):
-        self.id = self.canvas.create_rectangle(self.x, self.y, self.x + self.width, self.y + self.height, fill=self.color)
+        self.id = self.canvas.create_rectangle(self.x, self.y, self.x + self.width, self.y + self.height, outline = self.outline, fill = self.color)
 
 # Ellipse
 class Ellipse(GraphicsObject):
-    def __init__(self, canvas, x, y, width, height, color):
-        super().__init__(canvas, x, y, color)
+    def __init__(self, canvas, x, y, width, height, color, outlineWidth = 0, outline = None):
+        super().__init__(canvas, x, y, color, outline)
         self.width = width
         self.height = height
+        self.outlineWidth = outlineWidth
 
     def _draw(self):
-        self.id = self.canvas.create_oval(self.x, self.y, self.x + self.width, self.y + self.height, fill=self.color)
+        self.id = self.canvas.create_oval(self.x, self.y, self.x + self.width, self.y + self.height, width = self.outlineWidth, outline = self.outline, fill = self.color)
 
+    def shrink(self, x, y):
+        self.width += x
+        self.height += y
+        self.x -= x / 2
+        self.y -= y / 2
+    
+    def resize(self, width, height):
+        self.width = width
+        self.height = height
+    
     def setCenter(self, x, y):
         self.x = x - self.width / 2
         self.y = y - self.height / 2
@@ -1879,13 +2035,13 @@ class Ellipse(GraphicsObject):
 
 # Line
 class Line(GraphicsObject):
-    def __init__(self, canvas, x1, y1, x2, y2, color):
-        super().__init__(canvas, x1, y1, color)
+    def __init__(self, canvas, x1, y1, x2, y2, color, outline = None):
+        super().__init__(canvas, x1, y1, color, outline)
         self.x2 = x2
         self.y2 = y2
 
     def _draw(self):
-        self.id = self.canvas.create_line(self.x, self.y, self.x2, self.y2, fill=self.color)
+        self.id = self.canvas.create_line(self.x, self.y, self.x2, self.y2, outline = self.outline, fill = self.color)
 
     def getPoints(self):
         return self.x, self.y, self.x2, self.y2
@@ -1898,12 +2054,12 @@ class Line(GraphicsObject):
 
 # Text
 class Text(GraphicsObject):
-    def __init__(self, canvas, x, y, text, color):
-        super().__init__(canvas, x, y, color)
+    def __init__(self, canvas, x, y, text, color, outline = None):
+        super().__init__(canvas, x, y, color, outline)
         self.text = text
 
     def _draw(self):
-        self.id = self.canvas.create_text(self.x, self.y, text=self.text, fill=self.color)
+        self.id = self.canvas.create_text(self.x, self.y, text = self.text, outline = self.outline, fill = self.color)
 
     def get_text(self):
         return self.text
@@ -1913,12 +2069,12 @@ class Text(GraphicsObject):
 
 # Polygon
 class Polygon(GraphicsObject):
-    def __init__(self, canvas, points, color):
-        super().__init__(canvas, 0, 0, color)
+    def __init__(self, canvas, points, color, outline = None):
+        super().__init__(canvas, 0, 0, color, outline)
         self.points = points
 
     def _draw(self):
-        self.id = self.canvas.create_polygon(self.points, fill=self.color)
+        self.id = self.canvas.create_polygon(self.points, outline = self.outline, fill = self.color)
 
     def get_points(self):
         return self.points
@@ -1929,7 +2085,7 @@ class Polygon(GraphicsObject):
 # Image
 class GraphicsImage(GraphicsObject):
     def __init__(self, canvas, x, y, image):
-        super().__init__(canvas, x, y, None)
+        super().__init__(canvas, x, y, None, None)
         self.image = image
 
     def _draw(self):
@@ -1943,15 +2099,15 @@ class GraphicsImage(GraphicsObject):
 
 # Arc
 class Arc(GraphicsObject):
-    def __init__(self, canvas, x, y, width, height, start, extent, color):
-        super().__init__(canvas, x, y, color)
+    def __init__(self, canvas, x, y, width, height, start, extent, color, outline = None):
+        super().__init__(canvas, x, y, color, outline)
         self.width = width
         self.height = height
         self.start = start
         self.extent = extent
 
     def _draw(self):
-        self.id = self.canvas.create_arc(self.x, self.y, self.x + self.width, self.y + self.height, start=self.start, extent=self.extent, fill=self.color)
+        self.id = self.canvas.create_arc(self.x, self.y, self.x + self.width, self.y + self.height, start = self.start, extent = self.extent, outline = self.outline, fill = self.color)
 
     def get_arc(self):
         return self.x, self.y, self.width, self.height, self.start, self.extent
@@ -1966,25 +2122,20 @@ class Arc(GraphicsObject):
 
 # Rounded rectangle
 class RoundedRectangle(GraphicsObject):
-    def __init__(self, canvas, x, y, width, height, radius, color):
-        super().__init__(canvas, x, y, color)
+    def __init__(self, canvas, x, y, width, height, radius, color, outline = None):
+        super().__init__(canvas, x, y, color, outline)
         self.width = width
         self.height = height
         self.radius = radius
-        self.fillColor = color
 
     def _draw(self):
-        self.id = roundedRect(self.canvas, self.x, self.y, self.x + self.width, self.y + self.height, self.radius, fill = self.fillColor)
+        self.id = roundedRect(self.canvas, self.x, self.y, self.x + self.width, self.y + self.height, self.radius, outline = self.outline, fill = self.color)
     
     def shrink(self, x, y):
         self.width += x
         self.height += y
         self.x -= x / 2
         self.y -= y / 2
-    
-    def setPos(self, x, y):
-        self.x = x
-        self.y = y
     
     def resize(self, width, height):
         self.width = width
@@ -3026,6 +3177,12 @@ def colorRGB(r,g,b):
 
 def remap(value, min1, max1, min2, max2) -> float:
     return min2 + (value - min1) * (max2 - min2) / (max1 - min1)
+
+def remapClamped(value, min1, max1, min2, max2) -> float:
+    return clamp(min2 + (value - min1) * (max2 - min2) / (max1 - min1), min2, max2)
+
+def clamp(value, minimum, maximum) -> float:
+    return max(minimum, min(value, maximum))
 
 def lerpColor(color1, color2, amount):
     r = int(lerp(amount, color1[0], color2[0]))

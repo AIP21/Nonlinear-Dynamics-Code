@@ -2,7 +2,7 @@ import random
 import time
 from Lib.NewDEGraphics import *
 
-renderSize = (600, 600) # The size of the image to render in pixels
+renderSize = (650, 600) # The size of the image to render in pixels
 computeThreads = 16 # The number of threads to use for computing
 
 mandlebrotIterations = 250 # The iterations of the mandlebrot set used when drawing
@@ -322,13 +322,16 @@ with win:
     mandlebrotProgress.setValue(50)
     
     def sweepy():
-        sweeps = sweepsEntry.value
+        sweeps = sweepsSlider.value
         print("sweepy: " + str(sweeps))
      
     Label("Render sweeps (default = 4): ")
-    sweepsEntry = Spinner(value = sweeps, to = 64, command = sweepy, width = renderSize[0])
-    # self.sweepsEntry.value = self.renderSweeps
-    Tooltip(sweepsEntry, "The number of threads to use for computing the mandlebrot set and julia set. (Default: 16) Warning: Setting this too high may cause your computer to lag!")
+    
+    Separator(renderSize[0], 1, 5, 5)
+    
+    sweepsSlider = Slider(0, 16, value = sweeps, step = 1, width = renderSize[0], height = 30)
+    Tooltip(sweepsSlider, "The number of threads to use for computing the mandlebrot set and julia set. (Default: 16) Warning: Setting this too high may cause your computer to lag!")
+    
     
 
 #     # Compute the mandlebrot's set
