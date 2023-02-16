@@ -351,6 +351,7 @@ class MandlebrotSetExplorer():
         self.orbitDrawThread = None
         self.mandlebrotRenderThread = None
         self.juliaRenderThread = None
+        self.clickedMandlebrot = False
         
         self.cyclePeriod = 0
     
@@ -381,7 +382,7 @@ class MandlebrotSetExplorer():
                             self.zoomInMandlebrotButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
                             self.zoomInMandlebrotButton.disable()
                             
-                            self.zoomOutMandlebrotButton = Button(text = "Zoom Out", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.undoMandlebrotZoom)
+                            self.zoomOutMandlebrotButton = Button(text = "Zoom Out", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.zoomOutMandlebrot)
                             self.zoomOutMandlebrotButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
                             self.zoomOutMandlebrotButton.disable()
                             
@@ -397,7 +398,7 @@ class MandlebrotSetExplorer():
                         self.mandlebrotSet.selectionMaintainAspectRatio = True
                         self.mandlebrotSet.enableSelectionBox = False
                         self.mandlebrotSet.setOnClickDown(self.mandlebrotSetClicked)
-                        self.mandlebrotSet.setOnClickUp(self.mandlebrotSetZoomed)
+                        self.mandlebrotSet.setOnClickUp(self.zoomInMandlebrot)
                         self.mandlebrotSet.setOnDrag(self.mandlebrotSetDragged)
 
                         self.mandlebrotStatusText = Label("Click draw to render the mandlebrot set")
@@ -423,7 +424,7 @@ class MandlebrotSetExplorer():
                             self.zoomInJuliaButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
                             self.zoomInJuliaButton.disable()
                             
-                            self.zoomOutJuliaButton = Button(text = "Zoom Out", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.undoJuliaZoom)
+                            self.zoomOutJuliaButton = Button(text = "Zoom Out", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.zoomOutJulia)
                             self.zoomOutJuliaButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
                             self.zoomOutJuliaButton.disable()
                             
@@ -439,7 +440,7 @@ class MandlebrotSetExplorer():
                         self.mandlebrotSet.selectionMaintainAspectRatio = True
                         self.juliaSet.enableSelectionBox = False
                         self.juliaSet.setOnClickDown(self.juliaSetClicked)
-                        self.juliaSet.setOnClickUp(self.juliaSetZoomed)
+                        self.juliaSet.setOnClickUp(self.zoomInJulia)
                         self.juliaSet.setOnDrag(self.juliaSetDragged)
                         
                         self.juliaStatusText = Label("Click anywhere on the mandlebrot set to draw the julia set")
@@ -777,7 +778,6 @@ class MandlebrotSetExplorer():
         inCycle = False
         cycleDrawn = False
         diverged = False
-        self.cyclePeriod = 0
         
         # Track the visited points
         visitedPoints = []
@@ -785,7 +785,7 @@ class MandlebrotSetExplorer():
         # Draw the lines and ellipses
         while not self.exiting:
             # Make sure shift is not being pressed
-            if not self.isZooming and not self.mandlebrotBeingDrawn and not self.juliaBeingDrawn:
+            if not self.isZooming:
                 # Check that the clicked point hasn't changed
                 if point != self.clickedPoint:
                     # Undraw all pooled lines and ellipses
@@ -797,7 +797,7 @@ class MandlebrotSetExplorer():
                         ellipse.setCanvas(self.mandlebrotSet)
                         ellipse.undraw()
                     
-                    # Iteration vars
+                # Iteration vars
                     point = self.clickedPoint # Cache the clicked point
                     lastPoint = (self.clickedPoint.real, self.clickedPoint.imag)
                     iter = 0
@@ -818,6 +818,10 @@ class MandlebrotSetExplorer():
                     
                     if iter == len(visitedPoints) - 1:
                         cycleDrawn = True
+                        
+                        # Remember cycle period
+                        self.cyclePeriod = len(visitedPoints) - iter - 1
+                        self.clickedPointPeriodLabel.text = ("Period: " + str(self.cyclePeriod))
                 else: # Iterate mandlebrot fracal normally
                     z = z ** 2 + point
                     
@@ -826,15 +830,11 @@ class MandlebrotSetExplorer():
                     if (abs(z) >= 2):
                         # print("DIVERGED")
                         diverged = True
-                                    
+                    
                     # Check if the point has been visited before
                     if pt in visitedPoints:
                         inCycle = True
                         iter = visitedPoints.index(pt) - 1
-                        
-                        # Remember cycle period
-                        self.cyclePeriod = len(visitedPoints) - iter - 1
-                        self.clickedPointPeriodLabel.text = ("Period: " + str(self.cyclePeriod))
                     else:
                         visitedPoints.append(pt)
                 
@@ -844,13 +844,21 @@ class MandlebrotSetExplorer():
                 else:
                     self.orbitLinePool[lineIndex].setColor("red")
                     self.orbitEllipsePool[lineIndex].setColor("red")
-                    
-                self.orbitLinePool[lineIndex].setPoints(*self.getMandlebrotWidgetPoint(lastPoint), *self.getMandlebrotWidgetPoint(pt))
-                self.orbitLinePool[lineIndex].draw()
                 
-                self.orbitEllipsePool[lineIndex].setCenter(*self.getMandlebrotWidgetPoint(pt))
-                self.orbitEllipsePool[lineIndex].setSize(5, 5)
-                self.orbitEllipsePool[lineIndex].draw()
+                if self.clickedMandlebrot:
+                    self.orbitLinePool[lineIndex].setPoints(*self.getMandlebrotWidgetPoint(lastPoint), *self.getMandlebrotWidgetPoint(pt))
+                    self.orbitLinePool[lineIndex].draw()
+                    
+                    self.orbitEllipsePool[lineIndex].setCenter(*self.getMandlebrotWidgetPoint(pt))
+                    self.orbitEllipsePool[lineIndex].setSize(5, 5)
+                    self.orbitEllipsePool[lineIndex].draw()
+                else:
+                    self.orbitLinePool[lineIndex].setPoints(*self.getJuliaWidgetPoint(lastPoint), *self.getJuliaWidgetPoint(pt))
+                    self.orbitLinePool[lineIndex].draw()
+                    
+                    self.orbitEllipsePool[lineIndex].setCenter(*self.getJuliaWidgetPoint(pt))
+                    self.orbitEllipsePool[lineIndex].setSize(5, 5)
+                    self.orbitEllipsePool[lineIndex].draw()
                 
                 lastPoint = pt
             
@@ -1178,6 +1186,8 @@ class MandlebrotSetExplorer():
         
         self.dragging = drag
         
+        self.clickedMandlebrot = True
+        
         # Snap to nearest bookmark (if nearby)
         if self.snapToBookmarks:
             for i in range(len(self.bookmarks)):
@@ -1199,6 +1209,7 @@ class MandlebrotSetExplorer():
         if self.orbitDrawThread == None:
             self.orbitDrawThread = StoppableThread(name = "orbitDrawThread", target = self.drawOrbitPath)
             self.orbitDrawThread.start()
+            print("Starting orbit draw thread")
         
         self.drawJuliaButton.enable()
         
@@ -1216,54 +1227,60 @@ class MandlebrotSetExplorer():
         self.mandlebrotZoomHistory.append(self.mandlebrotCustomCoords)
     
     # Zoom into the mandlebrot set
-    def mandlebrotSetZoomed(self, value):
-        if self.isZooming:
-            zoom = self.mandlebrotSet.selectionBox
-            
-            if zoom == None or self.mandlebrotRendered == False or self.mandlebrotBeingDrawn:
-                return
-            
-            # Get frame size
-            w = self.mandlebrotSet.getWidth()
-            h = self.mandlebrotSet.getHeight()
-            
-            # Copy the zoom values
-            zoomX1 = zoom[0]
-            zoomY1 = zoom[1]
-            zoomX2 = zoom[2]
-            zoomY2 = zoom[3]
-            
-            # Correct the zoom coordinates if the user dragged the mouse from bottom right to top left
-            if (zoom[0] > zoom[2]):
-                zoomX1 = zoom[2]
-                zoomX2 = zoom[0]
-            if (zoom[1] > zoom[3]):
-                zoomY1 = zoom[3]
-                zoomY2 = zoom[1]
-            
-            print("Zoom: " + str(zoomX1) + ", " + str(zoomY1) + ", " + str(zoomX2) + ", " + str(zoomY2))
-            
-            # Convert the zoom coordinates to custom coords
-            x1 = self.mandlebrotCustomCoords[0] + (self.mandlebrotCustomCoords[2] - self.mandlebrotCustomCoords[0]) * (zoomX1 / w)
-            y1 = self.mandlebrotCustomCoords[1] + (self.mandlebrotCustomCoords[3] - self.mandlebrotCustomCoords[1]) * (zoomY1 / h)
-            x2 = self.mandlebrotCustomCoords[0] + (self.mandlebrotCustomCoords[2] - self.mandlebrotCustomCoords[0]) * (zoomX2 / w)
-            y2 = self.mandlebrotCustomCoords[1] + (self.mandlebrotCustomCoords[3] - self.mandlebrotCustomCoords[1]) * (zoomY2 / h)
-            
-            diff = [x1 - self.mandlebrotCustomCoords[0], y1 - self.mandlebrotCustomCoords[1], x2 - self.mandlebrotCustomCoords[2], y2 - self.mandlebrotCustomCoords[3]]
-            # print(diff)
-            
-            # Set the new coordinates
-            self.mandlebrotCustomCoords = [x1, y1, x2, y2]
-            
-            # print(self.mandlebrotCustomCoords)
-            
-            # Render the set
-            self.drawMandlebrotSet()
-            
-            # Add to mandlebrot zoom history
-            self.mandlebrotZoomHistory.append(self.mandlebrotCustomCoords)
+    def zoomInMandlebrot(self, value):
+        if not self.isZooming:
+            return
+        
+        zoom = self.mandlebrotSet.selectionBox
+        
+        if zoom == None or self.mandlebrotRendered == False or self.mandlebrotBeingDrawn:
+            return
+        
+        # Get frame size
+        w = self.mandlebrotSet.getWidth()
+        h = self.mandlebrotSet.getHeight()
+        
+        # Copy the zoom values
+        zoomX1 = zoom[0]
+        zoomY1 = zoom[1]
+        zoomX2 = zoom[2]
+        zoomY2 = zoom[3]
+        
+        # Correct the zoom coordinates if the user dragged the mouse from bottom right to top left
+        if (zoom[0] > zoom[2]):
+            zoomX1 = zoom[2]
+            zoomX2 = zoom[0]
+        if (zoom[1] > zoom[3]):
+            zoomY1 = zoom[3]
+            zoomY2 = zoom[1]
+        
+        print("Zoom: " + str(zoomX1) + ", " + str(zoomY1) + ", " + str(zoomX2) + ", " + str(zoomY2))
+        
+        # Convert the zoom coordinates to custom coords
+        x1 = self.mandlebrotCustomCoords[0] + (self.mandlebrotCustomCoords[2] - self.mandlebrotCustomCoords[0]) * (zoomX1 / w)
+        y1 = self.mandlebrotCustomCoords[1] + (self.mandlebrotCustomCoords[3] - self.mandlebrotCustomCoords[1]) * (zoomY1 / h)
+        x2 = self.mandlebrotCustomCoords[0] + (self.mandlebrotCustomCoords[2] - self.mandlebrotCustomCoords[0]) * (zoomX2 / w)
+        y2 = self.mandlebrotCustomCoords[1] + (self.mandlebrotCustomCoords[3] - self.mandlebrotCustomCoords[1]) * (zoomY2 / h)
+        
+        diff = [x1 - self.mandlebrotCustomCoords[0], y1 - self.mandlebrotCustomCoords[1], x2 - self.mandlebrotCustomCoords[2], y2 - self.mandlebrotCustomCoords[3]]
+        # print(diff)
+        
+        # Set the new coordinates
+        self.mandlebrotCustomCoords = [x1, y1, x2, y2]
+        
+        # print(self.mandlebrotCustomCoords)
+        
+        # Render the set
+        self.drawMandlebrotSet()
+        
+        # Add to mandlebrot zoom history
+        self.mandlebrotZoomHistory.append(self.mandlebrotCustomCoords)
+        
+        # Calculate the zoom factor from the original coords to the new zoomed coords
+        xMult = abs(-2.25 - 0.75) / abs(x1 - x2)
+        yMult = abs(-1.5 - 1.5) / abs(y1 - y2)
     
-    def undoMandlebrotZoom(self):
+    def zoomOutMandlebrot(self):
         if len(self.mandlebrotZoomHistory) > 0:
             self.zoomOutMandlebrotButton.disable()
             self.zoomOutJuliaButton.disable()
@@ -1298,6 +1315,8 @@ class MandlebrotSetExplorer():
     def juliaSetClicked(self, value):
         if(self.juliaRendered == False and not self.isZooming):
             return
+        
+        self.clickedMandlebrot = False
     
         w = self.juliaSet.getWidth()
         h = self.juliaSet.getHeight()
@@ -1315,7 +1334,7 @@ class MandlebrotSetExplorer():
         # Add to julia zoom history
         self.juliaZoomHistory.append(self.juliaCustomCoords)
     
-    def juliaSetZoomed(self, zoom):
+    def zoomInJulia(self, zoom):
          if self.isZooming:
             zoom = self.juliaSet.selectionBox
             
@@ -1362,7 +1381,7 @@ class MandlebrotSetExplorer():
             # Add to julia zoom history
             self.juliaZoomHistory.append(self.juliaCustomCoords)
     
-    def undoJuliaZoom(self):
+    def zoomOutJulia(self):
         if len(self.juliaZoomHistory) > 0:
             self.zoomOutMandlebrotButton.disable()
             self.zoomOutJuliaButton.disable()
@@ -1415,8 +1434,8 @@ class MandlebrotSetExplorer():
             if i < len(info[0]) - 1:
                 orbitStr += ", "
         self.clickedPointOrbitLabel.text = ("Orbit: " + str(orbitStr))
-        self.clickedPointPeriodLabel.text = ("Period: 0")
         self.orbitTooltip.text = ("Orbit: " + str(orbitStr))
+        self.clickedPointPeriodLabel.text = ("Period: 0")
         self.clickedPointItersLabel.text = ("Iterations: " + str(info[1]))
         self.clickedPointDivergedLabel.text = ("Diverged: " + str(info[2]))
 
@@ -1557,9 +1576,10 @@ class MandlebrotSetExplorer():
             self.mandlebrotIterations = max(1, int(value))
         
         def mandlebrotMethod(value):
-            if value == "Two-Tone":
+            print("M: " + str(value))
+            if value == "Escape Colors":
                 self.mandlebrotDrawMethod = 1
-            elif value == "Escape Colors":
+            elif value == "Two-Tone":
                 self.mandlebrotDrawMethod = 2
         
         def mandlebrotSound():
@@ -1572,6 +1592,7 @@ class MandlebrotSetExplorer():
             self.juliaIterations = max(1, int(value))
         
         def juliaMethod(value):
+            print("J: " + str(value))
             if value == "Escape Colors":
                 self.juliaDrawMethod = 1
             elif value == "Two-Tone":
@@ -1712,7 +1733,8 @@ class MandlebrotSetExplorer():
             self.mandlebrotRenderTimeLabel = Label("Mandlebrot render time: -s")
             self.juliaRenderTimeLabel = Label("Julia render time: -s")
             
-            self.zoomFactorLabel = Label("Zoom factor: Not implemented")
+            self.zoomFactorLabel = Label("Zoom factor: 1cm")
+            self.zoomFactorTooltip = Tooltip(self.zoomFactorLabel, "The zoom factor is a way to comprehend the scale of the width of the mandlebrot set. As you zoom in, the width of the unzoomed mandlebrot set grows.")
         
         # Selected point
         with Stack(relief = "groove", borderwidth = 2): 
