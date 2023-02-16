@@ -1,6 +1,9 @@
 from contextlib import contextmanager
 from decimal import Decimal
 import struct
+import platform
+import ctypes
+import subprocess
 
 try: # python 3
     import tkinter as tk
@@ -14,11 +17,10 @@ try: # python 3
     from tkinter import Image
     from tkinter import PhotoImage
     from tkinter import TclError
-    
-    hasPIL = True
-    
+
     try:
         from PIL import Image as PImage, ImageTk, ImageColor, ImageDraw, ImageFilter
+        hasPIL = True
     except:
         hasPIL = False
     
@@ -137,22 +139,49 @@ class DEGraphWin(tk.Tk):
         title (str): Title of the window
         width (int): Width of the window
         height (int): Height of the window
+        showScrollbar (boolean): Whether or not to show a scrollbar (if the content is taller than the window)
+        edgePadding (list): Padding to add to the edges of the window. [left, top, right, bottom]
         **kw: Other arguments to pass to tk.Tk
     """
-    def __init__(self, title = "Window", width = 500, height = 500, **kw):
-        tk.Tk.__init__(self)
+    def __init__(self, title = "Window", width = 500, height = 500, showScrollbar = True, edgePadding = [10, 10, 10, 10], **kw):
+        tk.Tk.__init__(self, **kw)
         self.title(title)
         self.kw = kw
         self.width = width
         self.height = height
+        self.showScrollbar = showScrollbar
+        self.edgePadding = edgePadding
         
+        # Set close protocol (x button on window top bar)
         self.protocol("WM_DELETE_WINDOW", self.close)
+        
+        # Set color to be used for background blur
+        # self.config(bg = 'green')
+        # self.wm_attributes("-transparent", 'green')
+        
+        
+        # Set window size
         self.geometry('%dx%d' % (width, height))
+    
+        # Blur the background
+        # GlobalBlur(self.HWND)
+        
+        # Change window icon
+        # self.tk.call('wm', 'iconphoto', self._w, PhotoImage(file = 'icon.png'))
+    
+    '''
+    Set the frosted glass state of the window
+    '''
+    # def setFrostedGlass(self, enabled):
+    #     if enabled:
+    #         self.wm_attributes("-transparent", 'green')
+    #     else:
+    #         self.wm_attributes("-transparent", 'pink') 
 
     def close(self):
         self.destroy()
     
-    def _on_mousewheel(self, event):
+    def onMouseWheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
      
     def setOnClick(self, func):
@@ -177,18 +206,26 @@ class DEGraphWin(tk.Tk):
         self.canvas.delete(item.id)
     
     def __enter__(self):
-        global _root, _pack_side
+        global _root, _pack_side, theme
 
-        # Create scroll bar
-        self.vscrollbar = AutoScrollbar(self)
-        self.vscrollbar.grid(row = 0, column = 1, sticky = N+S)
+        if self.showScrollbar:
+            # Create scroll bar
+            self.vscrollbar = AutoScrollbar(self)
+            self.vscrollbar.grid(row = 0, column = 1, sticky = N+S)
 
-        # Create canvas
-        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
-        self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
+            # Create canvas
+            self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
+            self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
 
-        # Configure scroll bar for canvas
-        self.vscrollbar.config(command = self.canvas.yview)
+            # Configure scroll bar for canvas
+            self.vscrollbar.config(command = self.canvas.yview)
+
+            # Bind mouse wheel to canvas
+            self.canvas.bind_all("<MouseWheel>", self.onMouseWheel)
+        else:
+            # Create canvas
+            self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0)
+            self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
 
         # Make the canvas expandable
         self.grid_rowconfigure(0, weight = 1)
@@ -199,6 +236,7 @@ class DEGraphWin(tk.Tk):
         self.frame.columnconfigure(0, weight = 1)
         self.frame.columnconfigure(1, weight = 1)
         
+        # Configure scroll region in frame
         self.frame.bind(
             "<Configure>",
             lambda e: self.canvas.configure(
@@ -206,42 +244,48 @@ class DEGraphWin(tk.Tk):
             ),
         )
 
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-
         _pack_side = TOP
         _root = self.frame
-        return self # was _root for some reason
+        return self # Duct tape for a dumb bug, was _root for some reason
      
     def __exit__(self, type, value, traceback):
         global _root, _pack_side
         
-        # puts tkinter widget onto canvas
-        self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(self.canvas.config()['width'][4])-int(self.vscrollbar.config()['width'][4]))
+        if self.showScrollbar:
+            # Puts tkinter widget onto canvas
+            self.canvas.create_window(self.edgePadding[0], self.edgePadding[1], anchor = NW, window = self.frame, width = int(self.canvas.config()['width'][4]) - int(self.vscrollbar.config()['width'][4]) - self.edgePadding[2] * 2, height = int(self.canvas.config()['height'][4]) - self.edgePadding[3] * 2)
+        
+            # Handle the canvas being resized
+            def resize_canvas(event):
+                self.canvas.create_window(self.edgePadding[0], self.edgePadding[1], anchor = NW, window = self.frame, width = int(event.width) - int(self.vscrollbar.config()['width'][4]) - self.edgePadding[2] * 2, height = int(event.height) - self.edgePadding[3] * 2)
+        
+            # Set canvas scroll region to the entire canvas
+            self.canvas.config(scrollregion = self.canvas.bbox("all"))
+        else:
+            self.canvas.create_window(self.edgePadding[0], self.edgePadding[1], anchor = NW, window = self.frame, width = int(self.canvas.config()['width'][4]) - self.edgePadding[2] * 2, height = int(self.canvas.config()['height'][4]) - self.edgePadding[3] * 2)
 
-        # deal with canvas being resized
-        def resize_canvas(event):
-            self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(event.width)-int(self.vscrollbar.config()['width'][4]))
+            # Handle the canvas being resized
+            def resize_canvas(event):
+                self.canvas.create_window(self.edgePadding[0], self.edgePadding[1], anchor = NW, window = self.frame, width = int(event.width) - self.edgePadding[2] * 2, height = int(event.height) - self.edgePadding[3] * 2)
+        
         self.canvas.bind("<Configure>", resize_canvas)
 
-        # updates geometry management
+        # Update the geometry management
         self.frame.update_idletasks()
 
-        # set canvas scroll region to all of the canvas
-        self.canvas.config(scrollregion = self.canvas.bbox("all"))
-
-        # set minimum window width
+        # Set min window width
         self.update()
         self.minsize(self.winfo_width(), 0)
         self.config(**self.kw)
         
         self.frame.update()
         
-        # start mainloop
+        # Start mainloop
         self.mainloop()
                 
         _pack_side = None
         
-        # stop all ongoing _events
+        # Stop all ongoing _events
         [event.set() for event in _events]
 
 class Window(tk.Toplevel):
@@ -370,12 +414,12 @@ class Slot(tk.Frame):
         self.kw = kw
         
     def __enter__(self):
-        global _root, _pack_side
+        global _root, _pack_side, theme
         self._root_old = _root
         self._pack_side_old = _pack_side
         tk.Frame.__init__(self, self._root_old, **self.kw)
         self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0)
-        self.pack(side = self._pack_side_old, fill = tk.X)
+        self.pack(side = self._pack_side_old, fill = 'both')
         _root = self
     
     def __exit__(self, type, value, traceback):
@@ -409,8 +453,11 @@ class Slot(tk.Frame):
             func: The function to call
         '''
         self.bind("<B1-Motion>", func)
-        
+
 class Stack(Slot):
+    '''
+    A frame with a layout that automatically places widgets from top to bottom
+    '''
     def __init__(self, **kw):
         Slot.__init__(self, **kw)
 
@@ -421,6 +468,25 @@ class Stack(Slot):
         return _root
 
 class Flow(Slot):
+    '''
+    A frame with a layout that automatically places widgets in from left to right
+    '''
+    def __init__(self, **kw):
+        Slot.__init__(self, **kw)
+
+    def __enter__(self):
+        global _pack_side
+        Slot.__enter__(self)
+        _pack_side = LEFT
+        return _root
+
+class Layout(Slot):
+    '''
+    A frame with a layout that automatically places widgets in a customizable direction
+    
+    args:
+        align: TOP, BOTTOM, LEFT, RIGHT
+    '''
     def __init__(self, align = LEFT, **kw):
         Slot.__init__(self, **kw)
         self.align = align
@@ -431,14 +497,168 @@ class Flow(Slot):
         _pack_side = self.align
         return _root
 
+class HideableFrame(Slot):
+    '''
+    A frame with a layout that automatically places widgets in a configurable direction
+    
+    Can be hidden or shown by clicking its arrow button
+    
+    args:
+        align: TOP, BOTTOM, LEFT, RIGHT
+    '''
+    
+    hidden = False
+    
+    def __init__(self, titleText = "", titleFont = "", align = TOP, **kw):
+        self.kw = kw
+        self.titleText = titleText
+        self.titleFont = titleFont if titleFont != "" else "Arial 12 bold"
+        self.align = align
+    
+        self.subFrame = None
+
+        with self:
+            self.headerFrame = Flow()
+
+            with self.headerFrame:
+                self.showHideButton = Button("⏷", width = 30, height = 30, cornerRadius = 25, command = self.showHide)
+                
+                if self.titleText != "":
+                    self.title = Label(self.titleText, padx = 10, justify = 'left', font = self.titleFont)
+            
+        self.subFrame = tk.Frame(self)
+        self.subFrame.pack(side = self.align, fill = tk.X)
+    
+    def showHide(self):        
+        if self.hidden:
+            self.show()
+        else:
+            self.hide()
+    
+    def hide(self):
+        self.hidden = True
+        self.showHideButton.text = "⏶"
+        
+        # Hide subframe
+        self.subFrame.pack_forget()
+        
+        # Update geometry
+        self.pack()
+    
+    def show(self):
+        self.hidden = False
+        self.showHideButton.text = "⏷"
+
+        # Show subframe
+        self.subFrame.pack(side = self.align, fill = tk.X)
+        
+        # Update geometry
+        self.pack()
+      
+    def __enter__(self):
+        global _root, _pack_side
+        self._root_old = _root
+        self._pack_side_old = _pack_side
+        tk.Frame.__init__(self, self._root_old, **self.kw)
+        self.pack(side = self._pack_side_old, fill = tk.X)
+        
+        if self.subFrame == None:
+            _root = self
+        else:
+            _root = self.subFrame
+    
+    def __exit__(self, type, value, traceback):
+        global _root, _pack_side
+        _root = self._root_old
+        _pack_side = self._pack_side_old
+
+class ScrollableFrame(tk.Frame):
+    """
+    A frame that you can scroll through. It has a scroll bar
+    
+    Usage:
+        with ScrollableFrame():
+            # add your widgets here
+    """
+    
+    def __init__(self, **kw):
+        self.kw = kw
+    
+    def __enter__(self):
+        global _root, _pack_side
+        self._root_old = _root
+        self._pack_side_old = _pack_side
+        tk.Frame.__init__(self, self._root_old, **self.kw)
+        
+        # Create scroll bar
+        self.vscrollbar = AutoScrollbar(self)
+        self.vscrollbar.grid(row = 0, column = 1, sticky = N+S)
+
+        # Create canvas
+        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
+        self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
+
+        # Configure scroll bar for canvas
+        self.vscrollbar.config(command = self.canvas.yview)
+
+        # Bind mouse wheel to canvas
+        self.canvas.bind_all("<MouseWheel>", self.onMouseWheel)
+
+        # Make the canvas expandable
+        self.grid_rowconfigure(0, weight = 1)
+        self.grid_columnconfigure(0, weight = 1)
+        
+        # Create frame in canvas
+        self.frame = tk.Frame(self.canvas, borderwidth = 0, bd = 0)
+        self.frame.columnconfigure(0, weight = 1)
+        self.frame.columnconfigure(1, weight = 1)
+        
+        # Configure scroll region in frame
+        self.frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(
+                scrollregion = self.canvas.bbox("all")
+            ),
+        )
+        
+        self.pack(side = self._pack_side_old, fill = tk.X)
+        _pack_side = TOP
+        _root = self.frame
+        return self.frame
+    
+    def onMouseWheel(self, event):
+        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def __exit__(self, type, value, traceback):
+        global _root, _pack_side
+        
+        # Puts tkinter widget onto canvas
+        self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(self.canvas.config()['width'][4]) - int(self.vscrollbar.config()['width'][4]))
+    
+        # Handle the canvas being resized
+        def resize_canvas(event):
+            self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(event.width) - int(self.vscrollbar.config()['width'][4]))
+    
+        # Set canvas scroll region to the entire canvas
+        self.canvas.config(scrollregion = self.canvas.bbox("all"))
+        self.canvas.bind("<Configure>", resize_canvas)
+        
+        self.update()
+        
+        self.frame.update()
+        
+        _root = self._root_old
+        _pack_side = self._pack_side_old
+
 class Separator(tk.Canvas):
     def __init__(self, width, height, horizontalSpacing, verticalSpacing, color = (100, 100, 100), **kw):
         self.kw = kw
         tk.Canvas.__init__(self, _root, width = width + horizontalSpacing * 2, height = height + verticalSpacing * 2, **self.kw)
         self.color = color
         
-        rect = Rectangle(self, horizontalSpacing, verticalSpacing, width, height, color = colorRGB(*self.color), outline = colorRGB(*self.color))
-        rect.draw()
+        if width != 0 and height != 0:
+            rect = Rectangle(self, horizontalSpacing, verticalSpacing, width, height, color = colorRGB(*self.color), outline = colorRGB(*self.color))
+            rect.draw()
         
         self.pack(side = _pack_side)
 
@@ -460,7 +680,7 @@ class Button(tk.Canvas):
     """
     
     hoverEffect = ("grow/darken", (4, 4, (20, 20, 20)))
-    disabled = False
+    enabled = True
     mouseOver = False
     
     def __init__(self, text, width = 120, height = 40, cornerRadius = 10, padding = 6, color = (200, 200, 200), textColor = (0, 0, 0), textFont = "Arial 10 bold", command = None, commandArgs = None, **kw):
@@ -479,9 +699,8 @@ class Button(tk.Canvas):
         self.rect.draw()
         
         # Create the text label
-        self.textvariable = tk.StringVar()
-        self.textvariable.set(self.kw['text'] if 'text' in self.kw else text)
-        self.text = self.create_text(width / 2, height / 2, width = width - (padding + 5) * 2, text = self.textvariable.get(), fill = colorRGB(*self.textColor), font = textFont)
+        self.labelText = text
+        self.label = self.create_text(width / 2, height / 2, width = width - (padding + 5) * 2, text = self.labelText, fill = colorRGB(*self.textColor), font = textFont)
         
         # Bind actions
         self.bind("<ButtonPress-1>", self.onPress)
@@ -508,18 +727,18 @@ class Button(tk.Canvas):
     def hoverEnter(self, event):
         self.mouseOver = True
         
-        if self.disabled:
+        if not self.enabled:
             return
         
         if self.hoverEffect[0] == "grow":
             # Grow the rect
-            self.rect.shrink(self.hoverEffect[1][0], self.hoverEffect[1][1])
+            self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
         elif self.hoverEffect[0] == "darken":
             # Darken the rect
             self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][0], self.color[1] - self.hoverEffect[1][1], self.color[2] - self.hoverEffect[1][2])
         elif self.hoverEffect[0] == "grow/darken":
             # Grow and darken the rect
-            self.rect.shrink(self.hoverEffect[1][0], self.hoverEffect[1][1])
+            self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
             self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][2][0], self.color[1] - self.hoverEffect[1][2][1], self.color[2] - self.hoverEffect[1][2][2])
         elif self.hoverEffect[0] == "color":
             # Change the rect color
@@ -528,12 +747,12 @@ class Button(tk.Canvas):
             pass
         
         self.rect.draw()
-        self.lift(self.text)
+        self.lift(self.label)
         
     def hoverExit(self, event):
         self.mouseOver = False
         
-        if self.disabled:
+        if not self.enabled:
             return
         
         if self.hoverEffect[0] == "grow":
@@ -557,25 +776,50 @@ class Button(tk.Canvas):
             pass
         
         self.rect.draw()
-        self.lift(self.text)
+        self.lift(self.label)
 
     def onPress(self, event):
+        if not self.enabled:
+            return
+        
         # Darken the background color
-        self.rect.color = colorRGB(max(0, self.color[0] - 20), max(0, self.color[1] - 20), max(0, self.color[2] - 20))
+        self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
+        
+        # Slightly shrink the rect
+        self.rect.grow(-2, -2)
+        
         self.rect.draw()
         
-        self.lift(self.text)
+        self.lift(self.label)
 
     def onRelease(self, event):
-        # Return the background color to normal
-        if self.hoverEffect[0] == "color":
-            self.rect.color = colorRGB(*self.hoverEffect[1])
+        if not self.enabled:
+            return
+        
+        # Return the background color to normal (or hover color if hovering over button)
+        if self.mouseOver:
+            self.rect.color = colorRGB(*self.color)
+            self.rect.grow(2, 2)
+            
+            if self.hoverEffect[0] == "darken":
+                # Darken the rect
+                self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][0], self.color[1] - self.hoverEffect[1][1], self.color[2] - self.hoverEffect[1][2])
+            elif self.hoverEffect[0] == "grow/darken":
+                # Grow and darken the rect
+                self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][2][0], self.color[1] - self.hoverEffect[1][2][1], self.color[2] - self.hoverEffect[1][2][2])
+            elif self.hoverEffect[0] == "color":
+                # Change the rect color
+                self.rect.color = colorRGB(*self.hoverEffect[1])
+            elif self.hoverEffect[0] == "none":
+                self.rect.color = colorRGB(*self.color)
         else:
             self.rect.color = colorRGB(*self.color)
-        self.rect.draw()
-        self.lift(self.text)
+            self.rect.grow(2, 2)
         
-        if(self.mouseOver and not self.disabled):
+        self.rect.draw()
+        self.lift(self.label)
+        
+        if(self.mouseOver):
             if self.command is not None:
                 if self.commandArgs is not None:
                     self.command(*self.commandArgs)
@@ -583,33 +827,34 @@ class Button(tk.Canvas):
                     self.command()
     
     def disable(self):
-        self.disabled = True
+        self.enabled = False
         
         self.config(state = tk.DISABLED)
         
         # Lighten the text color and darken the background color
-        self.itemconfig(self.text, fill = colorRGB(min(255, self.textColor[0] + 100), min(255, self.textColor[1] + 100), min(255, self.textColor[2] + 100)))
+        self.itemconfig(self.label, fill = colorRGB(min(255, self.textColor[0] + 100), min(255, self.textColor[1] + 100), min(255, self.textColor[2] + 100)))
         self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
     
     def enable(self):
-        self.disabled = False
+        self.enabled = True
         
         self.config(state = tk.NORMAL)
         
         # Return the text color and the background color to normal
-        self.itemconfig(self.text, fill = colorRGB(max(0, self.textColor[0] - 100), max(0, self.textColor[1] - 100), max(0, self.textColor[2] - 100)))
+        self.itemconfig(self.label, fill = colorRGB(max(0, self.textColor[0] - 100), max(0, self.textColor[1] - 100), max(0, self.textColor[2] - 100)))
         self.rect.color = colorRGB(*self.color)
     
     def isEnabled(self):
-        return not self.disabled
+        return self.enabled
     
     @property
     def text(self):
-        return self.textvariable.get()
+        return self.labelText
     
     @text.setter
     def text(self, text):
-        self.textvariable.set(text)
+        self.labelText = text
+        self.itemconfig(self.label, text = self.labelText)
 
 class Label(tk.Label):
     
@@ -700,7 +945,7 @@ class loop(threading.Thread):
             
 class TextBox(tk.Frame):
     hoverEffect = ("grow/darken", (4, 4, (20, 20, 20)))
-    disabled = False
+    enabled = False
     validInput = True
     
     '''
@@ -749,8 +994,8 @@ class TextBox(tk.Frame):
         val = self.register(self.validateChar)
         self.entry.config(validate = "key", validatecommand = (val, '%P'))
         self.entry.bind('<Return>', self.submit)
-        # self.bind('<Enter>', self.hoverEnter)
-        # self.bind('<Leave>', self.hoverExit)
+        self.bind('<Enter>', self.hoverEnter)
+        self.bind('<Leave>', self.hoverExit)
     
         self.pack(side = _pack_side)
     
@@ -768,18 +1013,18 @@ class TextBox(tk.Frame):
         self.hoverEffect = hoverEffect
     
     def hoverEnter(self, event):
-        if self.disabled:
+        if not self.enabled:
             return
         
         if self.hoverEffect[0] == "grow":
             # Grow the rect
-            self.rect.shrink(self.hoverEffect[1][0], self.hoverEffect[1][1])
+            self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
         elif self.hoverEffect[0] == "darken":
             # Darken the rect
             self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][0], self.color[1] - self.hoverEffect[1][1], self.color[2] - self.hoverEffect[1][2])
         elif self.hoverEffect[0] == "grow/darken":
             # Grow and darken the rect
-            self.rect.shrink(self.hoverEffect[1][0], self.hoverEffect[1][1])
+            self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
             self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][2][0], self.color[1] - self.hoverEffect[1][2][1], self.color[2] - self.hoverEffect[1][2][2])
         elif self.hoverEffect[0] == "color":
             # Change the rect color
@@ -791,18 +1036,18 @@ class TextBox(tk.Frame):
         self.lift(self.text)
         
     def hoverExit(self, event):
-        if self.disabled:
+        if not self.enabled:
             return
         
         if self.hoverEffect[0] == "grow":
             # Shrink the rect
-            self.rect.shrink(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
+            self.rect.grow(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
         elif self.hoverEffect[0] == "darken":
             # Return the rect color to normal
             self.rect.color = colorRGB(*self.color)
         elif self.hoverEffect[0] == "grow/darken":
             # Return the rect size and color to normal
-            self.rect.shrink(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
+            self.rect.grow(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
             self.rect.color = colorRGB(*self.color)
         elif self.hoverEffect[0] == "color":
             # Return the rect color to normal
@@ -814,7 +1059,7 @@ class TextBox(tk.Frame):
         self.lift(self.text)
     
     def disable(self):
-        self.disabled = True
+        self.enabled = False
         
         self.config(state = tk.DISABLED)
         
@@ -823,7 +1068,7 @@ class TextBox(tk.Frame):
         self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
     
     def enable(self):
-        self.disabled = False
+        self.enabled = True
         
         self.config(state = tk.NORMAL)
         
@@ -1158,90 +1403,6 @@ class ListBox(tk.Listbox):
     def selection(self):
         return self.curselection()[0]
 
-class ScrollableFrame(tk.Frame):
-    """
-    A frame that you can scroll through
-    
-    Usage:
-        with ScrollableFrame():
-            # add your widgets here
-    """
-    
-    def __init__(self, **kw):
-        self.kw = kw
-        
-    def __enter__(self):
-        global _root, _pack_side
-
-        self._root_old = _root
-        self._pack_side_old = _pack_side
-        tk.Frame.__init__(self, self._root_old, **self.kw)
-        self.pack(side = self._pack_side_old, fill = tk.X)
-        
-        # create scroll bars
-        self.vScrollBar = AutoScrollbar(self)
-        self.vScrollBar.grid(row = 0, column = 1, sticky = N+S)
-
-        # create canvas
-        self.canvas = tk.Canvas(self, yscrollcommand = self.vScrollBar.set,  bd = 5)
-        self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
-
-        # configure scroll bar for canvas
-        self.vScrollBar.config(command = self.canvas.yview)
-
-        # make the canvas expandable
-        self.grid_rowconfigure(0, weight = 1)
-        self.grid_columnconfigure(0, weight = 1)
-
-        # create frame in canvas
-        self.frame = tk.Frame(self.canvas)
-        self.frame.columnconfigure(0, weight = 1)
-        self.frame.columnconfigure(1, weight = 1)
-
-        self.frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(
-                scrollregion = self.canvas.bbox("all"), width = e.width
-            ),
-        )
-
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-        
-        _pack_side = TOP
-        _root = self.frame
-
-    def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-    def __exit__(self, type, value, traceback):
-        global _root, _pack_side
-        
-        # puts tkinter widget onto canvas
-        self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(self.canvas.config()['width'][4]) - int(self.vScrollBar.config()['width'][4]))
-
-        # deal with canvas being resized
-        def resize_canvas(event):
-            self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(event.width)-int(self.vScrollBar.config()['width'][4]))
-        self.canvas.bind("<Configure>", resize_canvas)
-
-        # updates geometry management
-        self.frame.update_idletasks()
-
-        # set canvas scroll region to all of the canvas
-        self.canvas.config(scrollregion = self.canvas.bbox("all"))
-
-        # set minimum window width
-        self.update()
-        
-        self.frame.update()
-        
-        # stop all ongoing _events
-        [event.set() for event in _events]
-        
-        global _root, _pack_side
-        _root = self._root_old
-        _pack_side = self._pack_side_old
-
 class Image(tk.Canvas):
     '''
     An image. Takes an image file from path. 
@@ -1487,7 +1648,7 @@ class Plot(tk.Canvas):
             self.tag_raise(self.dragBox, self.imageObj)
     
     def plot(self, x, y, color):
-        self.imageP.put("{color}".format(color = color), (x, y))
+        self.imageP.put("{color}".format(color = colorRGB(*color)), (x, y))
             
     def plotBulk(self, xStart, yStart, colors):
         self.imageP.put(colors, (xStart, yStart))
@@ -1513,6 +1674,9 @@ class Plot(tk.Canvas):
     
     def clear(self):
         self.imageP.blank()
+    
+    def saveImage(self, path):
+        self.imageP.write(path, format = 'png')
     
     # def refresh(self):
     #     self.itemconfig(self.imageObj, image = self.imageP)
@@ -2131,7 +2295,7 @@ class RoundedRectangle(GraphicsObject):
     def _draw(self):
         self.id = roundedRect(self.canvas, self.x, self.y, self.x + self.width, self.y + self.height, self.radius, outline = self.outline, fill = self.color)
     
-    def shrink(self, x, y):
+    def grow(self, x, y):
         self.width += x
         self.height += y
         self.x -= x / 2
@@ -2449,21 +2613,23 @@ class Tooltip:
         # show no border on the top level window
         tw.wm_overrideredirect(1)
 
-        self.label = ttk.Label(tw, text = self.text, justify = tk.LEFT, padding = (5, 2),
-                            background = "#ffffe0", relief = tk.SOLID, borderwidth = 1)
+        self.label = tk.Label(tw, text = self.text, justify = tk.LEFT, padx = 5, pady = 2, background = 'white', relief = tk.SOLID, borderwidth = 1)
+        self.tooltipWindow.bind('<Configure>', lambda event: self.label.config(wraplength = 150))
 
         lbl = self.label
-        self.kwargs['background'] = self.kwargs.get('background') or self.kwargs.get('bg') or "#ffffe0"
-        self.kwargs['foreground'] = self.kwargs.get('foreground') or self.kwargs.get('fg') or "black"
+        self.kwargs['background'] = self.kwargs.get('background') or self.kwargs.get('bg') or 'white'
+        self.kwargs['foreground'] = self.kwargs.get('foreground') or self.kwargs.get('fg') or 'black'
         configureWidget(lbl, **self.kwargs)
 
         # get text width using font, because .winfo_width() needs to call "update_idletasks()" to get correct width
         font = tkFont.Font(font = lbl['font'])
-        txt_width = font.measure(self.text)
+        lineCount = font.measure(self.label.cget('text')) / 150
+        textWidth = font.measure(self.label.cget('text'))
 
-        # correct position to stay inside screen
-        x = min(x, lbl.winfo_screenwidth() - txt_width)
-
+        # Correct the position to keep the tooltip inside the screen
+        if (x + (textWidth / lineCount) + 20) > lbl.winfo_screenwidth():
+            x = _root.winfo_screenwidth() - (textWidth / lineCount) - 20
+        
         tw.wm_geometry("+%d+%d" % (x, y))
         lbl.pack()
 
@@ -2609,6 +2775,127 @@ class ContextMenu(tk.Menu):
 
         if callable(self.callback):
             self.callback(option)
+#endregion
+
+#region This window blur functionality is from: https://github.com/Peticali/PythonBlurBehind
+# # Source material from the source linked above credited the following sources: https://github.com/Opticos/GWSL-Source/blob/master/blur.py , https://www.cnblogs.com/zhiyiYo/p/14659981.html , https://github.com/ifwe/digsby/blob/master/digsby/src/gui/vista.py
+# if platform.system() == 'Windows':
+#     from ctypes.wintypes import  DWORD, BOOL, HRGN, HWND
+#     user32 = ctypes.windll.user32
+#     dwm = ctypes.windll.dwmapi
+
+#     class ACCENTPOLICY(ctypes.Structure):
+#         _fields_ = [
+#             ("AccentState", ctypes.c_uint),
+#             ("AccentFlags", ctypes.c_uint),
+#             ("GradientColor", ctypes.c_uint),
+#             ("AnimationId", ctypes.c_uint)
+#         ]
+
+#     class WINDOWCOMPOSITIONATTRIBDATA(ctypes.Structure):
+#         _fields_ = [
+#             ("Attribute", ctypes.c_int),
+#             ("Data", ctypes.POINTER(ctypes.c_int)),
+#             ("SizeOfData", ctypes.c_size_t)
+#         ]
+
+#     class DWM_BLURBEHIND(ctypes.Structure):
+#         _fields_ = [
+#             ('dwFlags', DWORD), 
+#             ('fEnable', BOOL),  
+#             ('hRgnBlur', HRGN), 
+#             ('fTransitionOnMaximized', BOOL) 
+#         ]
+
+#     class MARGINS(ctypes.Structure):
+#         _fields_ = [("cxLeftWidth", ctypes.c_int),
+#                     ("cxRightWidth", ctypes.c_int),
+#                     ("cyTopHeight", ctypes.c_int),
+#                     ("cyBottomHeight", ctypes.c_int)
+#                     ]
+
+#     SetWindowCompositionAttribute = user32.SetWindowCompositionAttribute
+#     SetWindowCompositionAttribute.argtypes = (HWND, WINDOWCOMPOSITIONATTRIBDATA)
+#     SetWindowCompositionAttribute.restype = ctypes.c_int
+
+# def ExtendFrameIntoClientArea(HWND):
+#     margins = MARGINS(-1, -1, -1, -1)
+#     dwm.DwmExtendFrameIntoClientArea(HWND, ctypes.byref(margins))
+
+# def Win7Blur(HWND, Acrylic):
+#     if Acrylic == False:
+#         DWM_BB_ENABLE = 0x01
+#         bb = DWM_BLURBEHIND()
+#         bb.dwFlags = DWM_BB_ENABLE
+#         bb.fEnable = 1
+#         bb.hRgnBlur = 1
+#         dwm.DwmEnableBlurBehindWindow(HWND, ctypes.byref(bb))
+#     else:
+#         ExtendFrameIntoClientArea(HWND)
+
+# def HEXtoRGBAint(HEX:str):
+#     alpha = HEX[7:]
+#     blue = HEX[5:7]
+#     green = HEX[3:5]
+#     red = HEX[1:3]
+
+#     gradientColor = alpha + blue + green + red
+#     return int(gradientColor, base=16)
+
+# def blur(hwnd, hexColor = False, Acrylic = False, Dark = False):
+#     accent = ACCENTPOLICY()
+#     accent.AccentState = 3 #Default window Blur #ACCENT_ENABLE_BLURBEHIND
+
+#     gradientColor = 0
+    
+#     if hexColor != False:
+#         gradientColor = HEXtoRGBAint(hexColor)
+#         accent.AccentFlags = 2 #Window Blur With Accent Color #ACCENT_ENABLE_TRANSPARENTGRADIENT
+    
+#     if Acrylic:
+#         accent.AccentState = 4 #UWP but LAG #ACCENT_ENABLE_ACRYLICBLURBEHIND
+#         if hexColor == False: #UWP without color is translucent
+#             accent.AccentFlags = 2
+#             gradientColor = HEXtoRGBAint('#12121240') #placeholder color
+    
+#     accent.GradientColor = gradientColor
+    
+#     data = WINDOWCOMPOSITIONATTRIBDATA()
+#     data.Attribute = 19 #WCA_ACCENT_POLICY
+#     data.SizeOfData = ctypes.sizeof(accent)
+#     data.Data = ctypes.cast(ctypes.pointer(accent), ctypes.POINTER(ctypes.c_int))
+    
+#     SetWindowCompositionAttribute(int(hwnd), data)
+    
+#     if Dark: 
+#         data.Attribute = 26 #WCA_USEDARKMODECOLORS
+#         SetWindowCompositionAttribute(int(hwnd), data)
+
+# def BlurLinux(WID): #may not work in all distros (working in Deepin)
+#     import os
+
+#     c = "xprop -f _KDE_NET_WM_BLUR_BEHIND_REGION 32c -set _KDE_NET_WM_BLUR_BEHIND_REGION 0 -id " + str(WID)
+#     os.system(c)
+
+# def GlobalBlur(HWND, hexColor = False, Acrylic = False, Dark = False):
+    # release = platform.release()
+    # system = platform.system()
+
+    # if system == 'Windows':
+    #     if release == 'Vista': 
+    #         Win7Blur(HWND, Acrylic)
+    #     else:
+    #         release = int(float(release))
+    #         if release == 10 or release == 8 or release == 11: #idk what windows 8.1 spits, if is '8.1' int(float(release)) will work...
+    #             blur(HWND, hexColor, Acrylic, Dark)
+    #         else:
+    #             Win7Blur(HWND, Acrylic)
+    
+    # if system == 'Linux':
+    #     BlurLinux(HWND)
+
+    # if system == 'Darwin':
+    #     print("Unfortunately window blur is not supported on MacOS")
 #endregion
 
 #region Utils
@@ -3222,6 +3509,8 @@ def fastInverseSqrt(number):
 
 if __name__ == "__main__":
     win = DEGraphWin("This is a window")
+    # win.setFrostedGlass(True)
+    
     with win:
 
         Label("This is a label", font = "Verdana 24 bold underline")
@@ -3385,7 +3674,7 @@ if __name__ == "__main__":
             Label("haha", font = "Verdana 10 bold")
             Label("lol", font = "Verdana 4 italic")
     
-            bar = ProgressBar(50, 100, "black", "red", 100, 10)
+            bar = ProgressBar(start = 0, end = 100, value = 60, width = 100, height = 10, suffix = "%", color = (0, 0, 0), backgroundColor = (255, 0, 0))
             bar.setValue(25)
     
         Label("Graph:")
@@ -3405,11 +3694,12 @@ if __name__ == "__main__":
             line_0 = [(x/10, x/10) for x in range(10)]
             graph.plotLine(line_0)
     
-        Label("Image: ")
-        Image(100, 100, "Screenshot 2022-10-20 113914.png")
+        # Label("Image: ")
+        # Image(100, 100, "Screenshot 2022-10-20 113914.png")
 
         Label("Plot:")
         with Stack():
             plt = Plot(100, 100, colorRGB(10, 100, 60))
+            
         for i in range(100):
-            plt.plot(i, 10, (255, 0, 0))
+            plt.plot(i, 10, colorRGB(255, 0, 0))

@@ -1,6 +1,7 @@
 import random
 import time
 from Lib.NewDEGraphics import *
+import tkinter
 
 renderSize = (650, 600) # The size of the image to render in pixels
 computeThreads = 16 # The number of threads to use for computing
@@ -311,7 +312,7 @@ class ThreadWithReturnValue(threading.Thread):
         return self._return
 #endregion
 
-win = DEGraphWin("Mandlebrot's Set Visualizer", width = renderSize[0], height = renderSize[1])
+win = DEGraphWin("Mandlebrot's Set Visualizer", width = renderSize[0], height = renderSize[1], showScrollbar = False)
 
 sweeps = 4
 
@@ -332,63 +333,100 @@ with win:
     sweepsSlider = Slider(0, 16, value = sweeps, step = 1, width = renderSize[0], height = 30)
     Tooltip(sweepsSlider, "The number of threads to use for computing the mandlebrot set and julia set. (Default: 16) Warning: Setting this too high may cause your computer to lag!")
     
+    f = HideableFrame(titleText = "Test")
+    f.hide()
+    with f:
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+        Button("test")
+
+    # # Compute the mandlebrot's set
+    # print("Computing the mandlebrot's set")
+    # startTime = time.time()
+
+    # # Calculate mandlebrot's set into an array using numpy, using vEcToRiZaTiOn
+    # rMin = mandlebrotCustomCoords[0]
+    # rMax = mandlebrotCustomCoords[2]
+    # iMin = mandlebrotCustomCoords[1]
+    # iMax = mandlebrotCustomCoords[3]
+
+    # # Create ALL the x and y values
+    # x,y = np.ogrid[rMin:rMax:renderSize[0] * 1j, iMin:iMax:renderSize[1] * 1j]
+
+    # # Create ALL the complex numbers
+    # c = x + (y * 1j)
+
+    # # Initialize z to ALL be zero
+    # z = np.zeros(c.shape, dtype = np.complex128)
+
+    # # Keep track of which points did not converge so far
+    # m = np.full(c.shape, True, dtype = bool)
+
+    # # Keep track in which iteration the points diverged
+    # divergenceTimes = mandlebrotIterations + np.zeros(z.shape, dtype = int)
+
+    # for i in range(mandlebrotIterations):
+    #     # Iterate
+    #     z[m] = z[m] ** 2 + c[m]
+        
+    #     # Find diverging
+    #     diverging = np.greater(np.abs(z), 2, out = np.full(c.shape, False), where = m)
+
+    #     # Find which diverged in this iteration
+    #     diverged = np.logical_and(diverging, m)
+        
+    #     # Remember which have diverged
+    #     m[np.abs(z) > 2] = False
+        
+    #     # Remember when they diverged
+    #     divergenceTimes[diverged] = i
+
+    # diff = time.time() - startTime
+    # print("Finished computing the mandlebrot's set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")
     
+    # print("drawing")
+    # startTime = time.time()
 
-#     # Compute the mandlebrot's set
-#     print("Computing the mandlebrot's set")
-#     startTime = time.time()
+    # pixelObjects = []
 
-#     # Calculate mandlebrot's set into an array using numpy, using vEcToRiZaTiOn
-#     rMin = mandlebrotCustomCoords[0]
-#     rMax = mandlebrotCustomCoords[2]
-#     iMin = mandlebrotCustomCoords[1]
-#     iMax = mandlebrotCustomCoords[3]
+    # frame.plot(0, 0, 'red')
+    # frame.plot(10, 10, 'green')
+    # frame.plot(125, 125, 'blue')
+    # frame.refresh()
 
-#     # Create ALL the x and y values
-#     x,y = np.ogrid[rMin:rMax:renderSize[0] * 1j, iMin:iMax:renderSize[1] * 1j]
-
-#     # Create ALL the complex numbers
-#     c = x + (y * 1j)
-
-#     # Initialize z to ALL be zero
-#     z = np.zeros(c.shape, dtype = np.complex128)
-
-#     # Keep track of which points did not converge so far
-#     m = np.full(c.shape, True, dtype = bool)
-
-#     # Keep track in which iteration the points diverged
-#     divergenceTimes = mandlebrotIterations + np.zeros(z.shape, dtype = int)
-
-#     for i in range(mandlebrotIterations):
-#         # Iterate
-#         z[m] = z[m] ** 2 + c[m]
-        
-#         # Find diverging
-#         diverging = np.greater(np.abs(z), 2, out = np.full(c.shape, False), where = m)
-
-#         # Find which diverged in this iteration
-#         diverged = np.logical_and(diverging, m)
-        
-#         # Remember which have diverged
-#         m[np.abs(z) > 2] = False
-        
-#         # Remember when they diverged
-#         divergenceTimes[diverged] = i
-
-#     diff = time.time() - startTime
-#     print("Finished computing the mandlebrot's set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")
-    
-#     print("drawing")
-#     startTime = time.time()
-
-#     pixelObjects = []
-
-#     frame.plot(0, 0, 'red')
-#     frame.plot(10, 10, 'green')
-#     frame.plot(125, 125, 'blue')
-#     frame.refresh()
-
-#     sweeps = 4
+    # sweeps = 4
         
     # for sweep in range(sweeps):
     #     x = sweep
@@ -443,7 +481,7 @@ with win:
     #     win.update()
 
     # frame.update()
-    win.update()
+    # win.update()
 
     # diff = time.time() - startTime
     # print("Finished drawing the set set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")

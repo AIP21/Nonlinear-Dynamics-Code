@@ -21,7 +21,7 @@ import numpy as np
 #     nativeSound = True
 
 class MandlebrotSetExplorer():
-    width = 1350
+    width = 1300
     height = 750
 
     renderSize = (500, 500) # The size of the image to render in pixels
@@ -29,12 +29,12 @@ class MandlebrotSetExplorer():
     renderSweeps = 4 # The number of sweeps to use when rendering
 
     mandlebrotIterations = 100 # The iterations of the mandlebrot set used when drawing
-    mandlebrotDrawMethod = 2 # The method to use to draw the mandlebrot set. 1 = threshold, 2 = smooth, 3 = gaussian coloring, 4 = random colors (very cool looking)
+    mandlebrotDrawMethod = 1 # The method to use to draw the mandlebrot set. 1 = Escape Colors, 2 = Two-Tone
     mandlebrotSounds = False
     SAMPLE_RATE = 44100 # The sample rate for mandlebrot sounds (don't touch)
     
     juliaIterations = 100 # The iterations of the julia set used when drawing
-    juliaDrawMethod = 2 # The method to use to draw the julia set. 1 = threshold, 2 = smooth, 3 = random colors (very cool looking)
+    juliaDrawMethod = 1 # The method to use to draw the julia set. 1 = Escape Colors, 2 = Two-Tone
     autoComputeJuliaSet = False
 
     backgroundColor = (0, 0, 0)
@@ -328,11 +328,16 @@ class MandlebrotSetExplorer():
     # TODO: Add a way to save the current image to a file
     # TODO: Make a dark mode that follows the system theme
     # TODO: Make an arrow that hides and shows the controls for different controls sections
+    # TODO: Add inverse and border scan algorithms
+    # TODO: Make julia set draw a bit faster
     
     def main(self):
         # Create a window
-        self.mainWin = DEGraphWin("Mandlebrot Explorer", width = self.width, height = self.height)
+        self.mainWin = DEGraphWin("Mandlebrot Explorer", width = self.width, height = self.height, showScrollbar = False)
         self.mainWin.protocol("WM_DELETE_WINDOW", self.close)
+        
+        # Make the window blurred
+        # self.mainWin.setFrostedGlass(True)
         
         # Fill the pools
         for i in range(0, 50):
@@ -346,11 +351,13 @@ class MandlebrotSetExplorer():
         self.orbitDrawThread = None
         self.mandlebrotRenderThread = None
         self.juliaRenderThread = None
+        
+        self.cyclePeriod = 0
     
         self.imageWidth = int(self.width * 0.4)
         rightSideWidth = int(self.width * 0.13)
         
-        # Create the main ui layout
+        # Create the main GUI layout
         with self.mainWin:
             with Stack():
                 title = Label("Mandlebrot Explorer", width = self.width, font = "Arial 16 bold")
@@ -363,27 +370,30 @@ class MandlebrotSetExplorer():
                     mandlebrotFrame = Stack()
                     with mandlebrotFrame:
                         with Flow():
-                            Label("Mandlebrot Set", width = 15, font = "Arial 10 bold")
+                            Label("Mandlebrot Set", padx = 30, font = "Arial 10 bold")
                             
-                            self.recenterMandlebrotButton = Button(text = "Recenter", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8 bold", command = self.recenterMandlebrotSet)
+                            Separator(width = 1, height = 20, horizontalSpacing = 5, verticalSpacing = 0)
+                            
+                            self.recenterMandlebrotButton = Button(text = "Recenter", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.recenterMandlebrotSet)
                             self.recenterMandlebrotButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
                             
-                            self.zoomMandlebrotButton = Button(text = "Zoom In", width = 50, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8 bold", command = self.zoom)
-                            self.zoomMandlebrotButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
-                            self.zoomMandlebrotButton.disable()
+                            self.zoomInMandlebrotButton = Button(text = "Zoom In", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.zoom)
+                            self.zoomInMandlebrotButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+                            self.zoomInMandlebrotButton.disable()
                             
-                            self.undoZoomMandlebrotButton = Button(text = "Zoom Out", width = 90, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8 bold", command = self.undoMandlebrotZoom)
-                            self.undoZoomMandlebrotButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
-                            self.undoZoomMandlebrotButton.disable()
+                            self.zoomOutMandlebrotButton = Button(text = "Zoom Out", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.undoMandlebrotZoom)
+                            self.zoomOutMandlebrotButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+                            self.zoomOutMandlebrotButton.disable()
                             
-                            self.addBookmarkButton = Button(text = "+ Bookmark", width = 100, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8 bold", command = self.addBookmark)
-                            self.addBookmarkButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
-                            self.addBookmarkButton.disable()
+                            self.saveMandlebrotButton = Button(text = "Save", color = (240, 240, 100), width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.saveMandlebrot)
+                            self.saveMandlebrotButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+                            self.saveMandlebrotButton.disable()
                             
-                            self.showBookmarksButton = Button(text = "Bookmarks", width = 100, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8 bold", command = self.showBookmarks)
-                            self.showBookmarksButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+                            self.clearMandlebrotButton = Button(text = "Clear", color = (240, 75, 75), width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.clearMandlebrot)
+                            self.clearMandlebrotButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+                            self.clearMandlebrotButton.disable()
                         
-                        self.mandlebrotSet = Plot(height = self.height - 200, width = self.imageWidth, background = "black")
+                        self.mandlebrotSet = Plot(height = self.renderSize[1], width = self.renderSize[0], background = "black")
                         self.mandlebrotSet.selectionMaintainAspectRatio = True
                         self.mandlebrotSet.enableSelectionBox = False
                         self.mandlebrotSet.setOnClickDown(self.mandlebrotSetClicked)
@@ -392,7 +402,7 @@ class MandlebrotSetExplorer():
 
                         self.mandlebrotStatusText = Label("Click draw to render the mandlebrot set")
                         
-                        self.mandlebrotProgress = ProgressBar(0, 100, 0, width = self.imageWidth, height = 30, suffix = "%")
+                        self.mandlebrotProgress = ProgressBar(0, 100, 0, width = self.renderSize[0], height = 30, suffix = "%")
                     
                     # Spacer
                     with Stack(width = 5):
@@ -402,20 +412,30 @@ class MandlebrotSetExplorer():
                     juliaFrame = Stack()
                     with juliaFrame:
                         with Flow():
-                            Label("Julia Set", width = 40, font = "Arial 10 bold")
+                            Label("Julia Set", padx = 30, font = "Arial 10 bold")
                             
-                            self.recenterJuliaButton = Button(text = "Recenter", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8 bold", command = self.recenterJuliaSet)
+                            Separator(width = 1, height = 20, horizontalSpacing = 5, verticalSpacing = 0)
+                            
+                            self.recenterJuliaButton = Button(text = "Recenter", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.recenterJuliaSet)
                             self.recenterJuliaButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
                             
-                            self.zoomJuliaButton = Button(text = "Zoom In", width = 50, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8 bold", command = self.zoom)
-                            self.zoomJuliaButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
-                            self.zoomJuliaButton.disable()
+                            self.zoomInJuliaButton = Button(text = "Zoom In", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.zoom)
+                            self.zoomInJuliaButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+                            self.zoomInJuliaButton.disable()
                             
-                            self.undoZoomJuliaButton = Button(text = "Undo Out", width = 90, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8 bold", command = self.undoJuliaZoom)
-                            self.undoZoomJuliaButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
-                            self.undoZoomJuliaButton.disable()
+                            self.zoomOutJuliaButton = Button(text = "Zoom Out", width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.undoJuliaZoom)
+                            self.zoomOutJuliaButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+                            self.zoomOutJuliaButton.disable()
                             
-                        self.juliaSet = Plot(height = self.height - 200, width = self.imageWidth, background = "black")
+                            self.saveJuliaButton = Button(text = "Save", color = (240, 240, 100), width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.saveJulia)
+                            self.saveJuliaButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+                            self.saveJuliaButton.disable()
+                            
+                            self.clearJuliaButton = Button(text = "Clear", color = (240, 75, 75), width = 70, height = 22, padding = 3, cornerRadius = 10, textFont = "Arial 8", command = self.clearJulia)
+                            self.clearJuliaButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+                            self.clearJuliaButton.disable()
+                            
+                        self.juliaSet = Plot(height = self.renderSize[1], width = self.imageWidth, background = "black")
                         self.mandlebrotSet.selectionMaintainAspectRatio = True
                         self.juliaSet.enableSelectionBox = False
                         self.juliaSet.setOnClickDown(self.juliaSetClicked)
@@ -427,20 +447,20 @@ class MandlebrotSetExplorer():
                         self.juliaProgress = ProgressBar(0, 100, 0, width = self.imageWidth, height = 30, suffix = "%")
                     
                     # Separator
-                    Separator(width = 1, height = self.height - 200, horizontalSpacing = 5, verticalSpacing = 0)
+                    Separator(width = 1, height = self.height, horizontalSpacing = 5, verticalSpacing = 0)
                     
                     # Right side
                     self.rightSideFrame = Stack(height = self.height - 200, width = rightSideWidth)
                     with self.rightSideFrame:
-                        with Flow(relief = 'groove', borderwidth = 2):
-                            self.quitButton = Button(text = "Quit", color = (240, 75, 75), width = rightSideWidth * 0.9, height = 40, cornerRadius = 10, command = self.close)
+                        with Flow():
+                            self.quitButton = Button(text = "Quit", color = (240, 75, 75), width = rightSideWidth, height = 40, cornerRadius = 10, command = self.close)
                             Tooltip(self.quitButton, "Quit the program (duh)")
                             
-                            self.helpButton = Button(text = "?", color = (75, 150, 75), width = rightSideWidth * 0.25, height = 40, cornerRadius = 10, command = self.showHelp)
+                            self.helpButton = Button(text = "?", color = (75, 150, 75), width = rightSideWidth * 0.29, height = 40, cornerRadius = 10, command = self.showHelp)
                             Tooltip(self.helpButton, "Open the help window")
                         
                         # Separator
-                        Separator(width = rightSideWidth, height = 1, horizontalSpacing = 0, verticalSpacing = 5)
+                        Separator(width = rightSideWidth, height = 0, horizontalSpacing = 0, verticalSpacing = 5)
                         
                         self.createControlPanel(rightSideWidth)
         
@@ -448,20 +468,21 @@ class MandlebrotSetExplorer():
     
     #region Rendering and computation
     
-    ##### Mandlebrot Set Functions #####
-    
+    #region Mandlebrot Set Functions
     # Draw the mandlebrot set (called by the draw button)
     def drawMandlebrotSet(self):
         if self.mandlebrotBeingDrawn:
             return
             
         # Prevent zooming or recentering while drawing
-        self.zoomMandlebrotButton.disable()
-        self.zoomJuliaButton.disable()
-        self.undoZoomMandlebrotButton.disable()
-        self.undoZoomJuliaButton.disable()
+        self.zoomInMandlebrotButton.disable()
+        self.zoomInJuliaButton.disable()
+        self.zoomOutMandlebrotButton.disable()
+        self.zoomOutJuliaButton.disable()
         self.recenterMandlebrotButton.disable()
         self.recenterJuliaButton.disable()
+        self.saveMandlebrotButton.disable()
+        self.clearMandlebrotButton.disable()
         
         # Set status text and progress bar
         self.mandlebrotStatusText.text = "Computing..."
@@ -517,12 +538,14 @@ class MandlebrotSetExplorer():
             diverged = np.logical_and(diverging, m)
             
             # Remember which have diverged
-            m[np.abs(z) > 2] = False
+            m[diverged] = False
             
             # Remember when they diverged
             divergenceTimes[diverged] = i
             
-            self.mandlebrotProgress.setValue(lerp(i / maxIterations, 0, 100))
+            # Change the progress bar
+            if (i % 10 == 0):
+                self.mandlebrotProgress.setValue(lerp(i / maxIterations, 0, 100))
 
         diff = time.time() - startTime
         print("Finished computing the mandlebrot set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")
@@ -531,10 +554,12 @@ class MandlebrotSetExplorer():
 
     # Done on another thread to avoid freezing. Render mandlebrot data using a sweep algorithm
     def renderMandlebrotSet(self):
+        mainStartTime = time.time()
+        
         # Compute the mandlebrot set
         computedData = self.computeMandlebrotSet(self.renderSize, self.mandlebrotCustomCoords, self.mandlebrotIterations)
         
-        startTime = time.time()
+        renderStartTime = time.time()
         
         print("Rendering the mandlebrot set")
         
@@ -544,76 +569,114 @@ class MandlebrotSetExplorer():
         self.mandlebrotSet.clear()
         
         totalPixelTime = 0
-        rowLoop = 0
         
         # Sweep
-        for sweep in range(self.renderSweeps):
-            y = sweep
+        # for sweep in range(self.renderSweeps):
+        #     y = sweep
             
-            # Go through every y value, with a step of sweeps
-            while y < self.renderSize[1]:
-                startLoop = time.time()
+        #     # Go through every y value, with a step of sweeps
+        #     while y < self.renderSize[1]:
+        #         startLoop = time.time()
                 
-                # Track the color of every pixel on this row
-                rowColors = []
+        #         # Track the color of every pixel on this row
+        #         rowColors = []
                                 
-                # Go through every x value
-                for x in range(self.renderSize[0]):
-                    val = computedData[x][y]
+        #         # Go through every x value
+        #         for x in range(self.renderSize[0]):
+        #             val = computedData[x][y]
                     
-                    color = 'black'
+        #             color = 'black'
                                     
-                    pixelTime = time.time()
-                    if self.mandlebrotDrawMethod == 1:
-                        if val == self.mandlebrotIterations:
-                            # Threshold coloring
-                            color = 'white'
-                    elif self.mandlebrotDrawMethod == 2:
-                        if val != self.mandlebrotIterations:
-                            # Gradient coloring
-                            color = colorRGB(*getGradientColor(val / self.mandlebrotIterations, self.colorMap))
-                    elif self.mandlebrotDrawMethod == 3:
-                        if val != self.mandlebrotIterations:
-                            # Wierd coloring
-                            color = colorRGB(*getGradientColor((math.sin(val) + 1) / 2, self.colorMap))
+        #             pixelTime = time.time()
+        #             if self.mandlebrotDrawMethod == 1:
+        #                 if val == self.mandlebrotIterations:
+        #                     # Threshold coloring
+        #                     color = 'white'
+        #             elif self.mandlebrotDrawMethod == 2:
+        #                 if val != self.mandlebrotIterations:
+        #                     # Gradient coloring
+        #                     color = colorRGB(*getGradientColor(val / self.mandlebrotIterations, self.colorMap))
+        #             elif self.mandlebrotDrawMethod == 3:
+        #                 if val != self.mandlebrotIterations:
+        #                     # Wierd coloring
+        #                     color = colorRGB(*getGradientColor((math.sin(val) + 1) / 2, self.colorMap))
                     
-                    rowColors.append(color)
+        #             rowColors.append(color)
                     
-                    totalPixelTime += time.time() - pixelTime
+        #             totalPixelTime += time.time() - pixelTime
                 
-                # Append row pixel colors
-                self.mandlebrotSet.plotBulk(0, y,  ("{" + str(rowColors)[1:-1].replace('\'', '').replace(',', '') + "} "))
+        #         # Append row pixel colors
+        #         self.mandlebrotSet.plotBulk(0, y,  ("{" + str(rowColors)[1:-1].replace('\'', '').replace(',', '') + "} "))
                 
-                # Step the y value
-                y += self.renderSweeps
+        #         # Step the y value
+        #         y += self.renderSweeps
                 
-                rowLoop += time.time() - startLoop
+        #         rowLoop += time.time() - startLoop
                 
-                # Progress using sweep and y value
-                newProgress = lerp((sweep + (y / self.renderSize[1])) / self.renderSweeps, 0, 100)
-                self.mandlebrotProgress.setValue(newProgress)
+        #         # Progress using sweep and y value
+        #         newProgress = lerp((sweep + (y / self.renderSize[1])) / self.renderSweeps, 0, 100)
+        #         self.mandlebrotProgress.setValue(newProgress)
+        
+        # Calculate pixel colors
+        pixels = ""
+        
+        for y in range(self.renderSize[1]):
+            # Track the color of every pixel on this row
+            rowColors = []
+                            
+            # Go through every x value
+            for x in range(self.renderSize[0]):
+                val = computedData[x][y]
+                
+                color = 'black'
+                                
+                pixelTime = time.time()
+                if self.mandlebrotDrawMethod == 1:
+                    if val != self.mandlebrotIterations:
+                        # Gradient coloring
+                        color = colorRGB(*getGradientColor(val / self.mandlebrotIterations, self.colorMap))
+                elif self.mandlebrotDrawMethod == 2:
+                    if val == self.mandlebrotIterations:
+                        # Threshold coloring
+                        color = 'white'
+                
+                rowColors.append(color)
+                
+                totalPixelTime += time.time() - pixelTime
+            
+            # Append row pixel colors
+            pixels += "{" + str(rowColors)[1:-1].replace('\'', '').replace(',', '') + "} "
+                        
+            # Change progress bar using y value
+            if (y % 10 == 0):
+                self.mandlebrotProgress.setValue(lerp(y / self.renderSize[1], 0, 100))
+        
+        self.mandlebrotSet.plotBulk(0, 0, pixels)
         
         # Print average times
+        print("Finished rendering! Time stats:")
         print("Average pixel time: " + str((totalPixelTime / (self.renderSize[0] * self.renderSize[1])) * 1000) + "ms")
-        print("Total pixel time: " + str(totalPixelTime * 1000) + "ms")
-        print("Average row loop time: " + str((rowLoop / self.renderSize[1]) * 1000) + "ms")
-        print("Total row loop time: " + str(rowLoop * 1000) + "ms")
+        print("Total pixel time: " + str(time.time() - renderStartTime) + "ms")
+        print("")
         
-        diff = time.time() - startTime
-        print("Finished rendering the mandlebrot set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")
+        self.mandlebrotRenderTime = time.time() - mainStartTime
+        print("Finished computing and rendering the mandlebrot set in: " + str(self.mandlebrotRenderTime) + "sec (" + str(self.mandlebrotRenderTime * 1000) + "ms)")
         
         self.mandlebrotRendered = True
         self.drawMandlebrotButton.enable()
+        self.saveMandlebrotButton.enable()
         
         # Reset zoom state
         self.isZooming = False
         self.mandlebrotSet.selectionBox = False
-        self.zoomMandlebrotButton.enable()
-        self.zoomJuliaButton.enable()
-        self.undoZoomMandlebrotButton.enable()
-        self.undoZoomJuliaButton.enable()
+        self.zoomInMandlebrotButton.enable()
+        self.zoomInJuliaButton.enable()
+        self.zoomOutMandlebrotButton.enable()
+        self.zoomOutJuliaButton.enable()
         self.recenterMandlebrotButton.enable()
         self.recenterJuliaButton.enable()
+        self.saveMandlebrotButton.enable()
+        self.clearMandlebrotButton.enable()
         
         # Refersh bookmarks
         self.refreshBookmarks()
@@ -622,7 +685,22 @@ class MandlebrotSetExplorer():
         self.mandlebrotStatusText.text = ""
         self.mandlebrotBeingDrawn = False
         self.mandlebrotProgress.setValue(0)
-    
+        self.mandlebrotRenderTimeLabel.text = ("Mandlebrot render time: " + str(round(self.mandlebrotRenderTime, 3)) + "s")
+   
+    def clearMandlebrot(self):
+        self.mandlebrotSet.clear()
+        self.mandlebrotRendered = False
+        self.mandlebrotBeingDrawn = False
+        self.mandlebrotProgress.setValue(0)
+        self.mandlebrotRenderTimeLabel.text = "Mandlebrot render time: -s"
+        self.mandlebrotStatusText.text = "Click draw to render the mandlebrot set"
+        self.drawMandlebrotButton.enable()
+        self.saveMandlebrotButton.disable()
+        self.zoomInMandlebrotButton.disable()
+        self.zoomOutMandlebrotButton.disable()
+        self.recenterMandlebrotButton.disable()
+        self.clearMandlebrotButton.disable()
+    #endregion
     
     ##### Orbit Functions #####
     
@@ -699,6 +777,7 @@ class MandlebrotSetExplorer():
         inCycle = False
         cycleDrawn = False
         diverged = False
+        self.cyclePeriod = 0
         
         # Track the visited points
         visitedPoints = []
@@ -706,7 +785,7 @@ class MandlebrotSetExplorer():
         # Draw the lines and ellipses
         while not self.exiting:
             # Make sure shift is not being pressed
-            if not self.isZooming:
+            if not self.isZooming and not self.mandlebrotBeingDrawn and not self.juliaBeingDrawn:
                 # Check that the clicked point hasn't changed
                 if point != self.clickedPoint:
                     # Undraw all pooled lines and ellipses
@@ -718,7 +797,7 @@ class MandlebrotSetExplorer():
                         ellipse.setCanvas(self.mandlebrotSet)
                         ellipse.undraw()
                     
-                # Iteration vars
+                    # Iteration vars
                     point = self.clickedPoint # Cache the clicked point
                     lastPoint = (self.clickedPoint.real, self.clickedPoint.imag)
                     iter = 0
@@ -727,6 +806,7 @@ class MandlebrotSetExplorer():
                     inCycle = False
                     cycleDrawn = False
                     diverged = False
+                    self.cyclePeriod = 0
 
                     visitedPoints = []
                 
@@ -741,7 +821,7 @@ class MandlebrotSetExplorer():
                 else: # Iterate mandlebrot fracal normally
                     z = z ** 2 + point
                     
-                    pt = (round(z.real, 2), round(z.imag, 2))
+                    pt = (round(z.real, 3), round(z.imag, 3))
                     
                     if (abs(z) >= 2):
                         # print("DIVERGED")
@@ -751,6 +831,10 @@ class MandlebrotSetExplorer():
                     if pt in visitedPoints:
                         inCycle = True
                         iter = visitedPoints.index(pt) - 1
+                        
+                        # Remember cycle period
+                        self.cyclePeriod = len(visitedPoints) - iter - 1
+                        self.clickedPointPeriodLabel.text = ("Period: " + str(self.cyclePeriod))
                     else:
                         visitedPoints.append(pt)
                 
@@ -782,7 +866,6 @@ class MandlebrotSetExplorer():
                         time.sleep(0.05)
                 except:
                     dummy = 0
-
         # threading.Thread(target = self.playOrbitSound).start()
 
 
@@ -794,12 +877,14 @@ class MandlebrotSetExplorer():
             return
             
         # Prevent zooming or recentering while drawing
-        self.zoomMandlebrotButton.disable()
-        self.zoomJuliaButton.disable()
-        self.undoZoomMandlebrotButton.disable()
-        self.undoZoomJuliaButton.disable()
+        self.zoomInMandlebrotButton.disable()
+        self.zoomInJuliaButton.disable()
+        self.zoomOutMandlebrotButton.disable()
+        self.zoomOutJuliaButton.disable()
         self.recenterMandlebrotButton.disable()
         self.recenterJuliaButton.disable()
+        self.saveJuliaButton.disable()
+        self.clearJuliaButton.disable()
         
         # Set status text
         self.juliaStatusText.text = "Computing..."
@@ -817,7 +902,7 @@ class MandlebrotSetExplorer():
         
         self.juliaBeingDrawn = True
     
-    # Compute the Julia set and return it's colors
+    # Compute the Julia set using brute-force
     def computeJuliaSet(self, size, customCoords, maxIterations, juliaC):
         # Compute the julia set
         print("Computing the julia set")
@@ -855,46 +940,47 @@ class MandlebrotSetExplorer():
             diverged = np.logical_and(diverging, m)
             
             # Remember which have diverged
-            m[np.abs(z) > 2] = False
+            m[diverged] = False
             
             # Remember when they diverged
             divergenceTimes[diverged] = i
             
-            self.juliaProgress.setValue(lerp((i / maxIterations), 0, 100))
+            # Change the progress bar
+            if (i % 10 == 0):
+                self.juliaProgress.setValue(lerp((i / maxIterations), 0, 100))
 
         diff = time.time() - startTime
         print("Finished computing the julia set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")
 
         return divergenceTimes
-    
+
     # Done on another thread to avoid freezing. Render the julia and display that image
     def renderJuliaSet(self):
+        mainStartTime = time.time()
+        
         # Compute the julia set
-        computedData = self.computeJuliaSet(self.renderSize, self.juliaCustomCoords, self.juliaIterations, self.clickedPoint)
+        if self.juliaDrawMethod == 1:
+            computedData = self.computeJuliaSet(self.renderSize, self.juliaCustomCoords, self.juliaIterations, self.clickedPoint)
         
-        startTime = time.time()
-        
-        print("Rendering the julia set")
-        
-        self.juliaStatusText.text = "Rendering..."
-        self.juliaProgress.setValue(0)
-        
-        self.juliaSet.clear()
-        
-        totalPixelTime = 0
-        rowLoop = 0
-        
-        # Sweep
-        for sweep in range(self.renderSweeps):
-            y = sweep
+            renderStartTime = time.time()
             
-            # Go through every y value, with a step of sweeps
-            while y < self.renderSize[1]:
-                startLoop = time.time()
-                
+            print("Rendering the julia set")
+            
+            self.juliaStatusText.text = "Rendering..."
+            self.juliaProgress.setValue(0)
+            
+            self.juliaSet.clear()
+            
+            totalPixelTime = 0
+            
+            # Calculate the pixel colors
+            pixels = ""
+            
+            # Go through every y value
+            for y in range(self.renderSize[1]):            
                 # Track the color of every pixel on this row
                 rowColors = []
-                                
+                
                 # Go through every x value
                 for x in range(self.renderSize[0]):
                     val = computedData[x][y]
@@ -903,51 +989,97 @@ class MandlebrotSetExplorer():
                                     
                     pixelTime = time.time()
                     if self.juliaDrawMethod == 1:
-                        if val == self.juliaIterations:
-                            # Threshold coloring
-                            color = 'white'
-                    elif self.juliaDrawMethod == 2:
                         if val != self.juliaIterations:
                             # Gradient coloring
                             color = colorRGB(*getGradientColor(val / self.juliaIterations, self.colorMap))
+                    elif self.juliaDrawMethod == 2:
+                        if val == self.juliaIterations:
+                            # Threshold coloring
+                            color = 'white'
                     
                     rowColors.append(color)
                     
                     totalPixelTime += time.time() - pixelTime
                 
                 # Append row pixel colors
-                self.juliaSet.plotBulk(0, y,  ("{" + str(rowColors)[1:-1].replace('\'', '').replace(',', '') + "} "))
+                pixels += ("{" + str(rowColors)[1:-1].replace('\'', '').replace(',', '') + "} ")
                 
-                # Step the y value
-                y += self.renderSweeps
-                                
-                rowLoop += time.time() - startLoop
+                # Change progress bar using y value
+                if (y % 10 == 0):
+                    self.juliaProgress.setValue(lerp(y / self.renderSize[1], 0, 100))
+            
+            # Draw ALL the pixels
+            self.juliaSet.plotBulk(0, 0, pixels)
+        elif self.juliaDrawMethod == 2:        
+            renderStartTime = time.time()
+            
+            print("Rendering the julia set (INVERSE METHOD)")
+            
+            self.juliaStatusText.text = "Rendering..."
+            self.juliaProgress.setValue(0)
+            
+            self.juliaSet.clear()
+            
+            totalPixelTime = 0
+            
+            rMin = self.juliaCustomCoords[0]
+            rMax = self.juliaCustomCoords[2]
+            iMin = self.juliaCustomCoords[1]
+            iMax = self.juliaCustomCoords[3]
+            
+            alreadyPlotted = []
+            
+            # Compute and draw
+            for i in range(self.juliaIterations):
+                pixelTime = time.time()
+                z = complex(lerp(random.random(), rMin, rMax), lerp(random.random(), iMin, iMax))
                 
-                # Progress using sweep and y value
-                newProgress = lerp((sweep + (y / self.renderSize[1])) / self.renderSweeps, 0, 100)
-                self.juliaProgress.setValue(newProgress)
-        
+                for n in range(1000):
+                    z = (z - self.clickedPoint) ** 0.5
+                    
+                    if random.random() < 0.5:
+                        z *= -1
+
+                # for n in range(1000):
+                #     z = (z - self.clickedPoint) ** 0.5
+                    
+                #     if random.random() < 0.5:
+                #         z *= -1
+                
+                if z not in alreadyPlotted:
+                    alreadyPlotted.append(z)
+                    self.juliaSet.plot(x = int(remap(z.real, rMin, rMax, 0, self.renderSize[0])), y = int(remap(z.imag, iMin, iMax, 0, self.renderSize[1])), color = (0, 0, 0))
+                
+                totalPixelTime += time.time() - pixelTime
+                
+                # Change progress bar using the index
+                if (i % 10 == 0):
+                    self.juliaProgress.setValue(lerp(i / self.juliaIterations, 0, 100))                
+
         # Print average times
+        print("Finished rendering! Times stats:")
         print("Average pixel time: " + str((totalPixelTime / (self.renderSize[0] * self.renderSize[1])) * 1000) + "ms")
-        print("Total pixel time: " + str(totalPixelTime * 1000) + "ms")
-        print("Average row loop time: " + str((rowLoop / self.renderSize[1]) * 1000) + "ms")
-        print("Total row loop time: " + str(rowLoop * 1000) + "ms")
+        print("Total pixel time: " + str(time.time() - renderStartTime * 1000) + "ms")
         
-        diff = time.time() - startTime
-        print("Finished rendering the julia set in: " + str(diff) + "sec (" + str(diff * 1000) + "ms)")
+        self.juliaRenderTime = time.time() - mainStartTime
+        
+        print("Finished computing and rendering the julia set in: " + str(self.juliaRenderTime) + "sec (" + str(self.juliaRenderTime * 1000) + "ms)")
         
         self.juliaRendered = True
         self.drawJuliaButton.enable()
+        self.saveJuliaButton.enable()
         
         # Reset zoom state
         self.isZooming = False
         self.juliaSet.selectionBox = False
-        self.zoomMandlebrotButton.enable()
-        self.zoomJuliaButton.enable()
-        self.undoZoomMandlebrotButton.enable()
-        self.undoZoomJuliaButton.enable()
+        self.zoomInMandlebrotButton.enable()
+        self.zoomInJuliaButton.enable()
+        self.zoomOutMandlebrotButton.enable()
+        self.zoomOutJuliaButton.enable()
         self.recenterMandlebrotButton.enable()
         self.recenterJuliaButton.enable()
+        self.saveJuliaButton.enable()
+        self.clearJuliaButton.enable()
         
         # Refersh bookmarks
         self.refreshBookmarks()
@@ -956,6 +1088,21 @@ class MandlebrotSetExplorer():
         self.juliaStatusText.text = ""
         self.juliaBeingDrawn = False
         self.juliaProgress.setValue(0)
+        self.juliaRenderTimeLabel.text = ("Julia render time: " + str(round(self.juliaRenderTime, 3)) + "s")
+    
+    def clearJulia(self):
+        self.juliaSet.clear()
+        self.juliaRendered = False
+        self.juliaBeingDrawn = False
+        self.juliaProgress.setValue(0)
+        self.juliaRenderTimeLabel.text = "Julia render time: -s"
+        self.juliaStatusText.text = "Click anywhere on the mandlebrot set to draw the julia set"
+        self.drawJuliaButton.enable()
+        self.saveJuliaButton.disable()
+        self.zoomInJuliaButton.disable()
+        self.zoomOutJuliaButton.disable()
+        self.recenterJuliaButton.disable()
+        self.clearJuliaButton.disable()
     #endregion
 
     #region Sound
@@ -1118,13 +1265,24 @@ class MandlebrotSetExplorer():
     
     def undoMandlebrotZoom(self):
         if len(self.mandlebrotZoomHistory) > 0:
-            self.undoZoomMandlebrotButton.disable()
-            self.undoZoomJuliaButton.disable()
+            self.zoomOutMandlebrotButton.disable()
+            self.zoomOutJuliaButton.disable()
             
             self.mandlebrotCustomCoords = self.mandlebrotZoomHistory.pop()
             
             self.drawMandlebrotSet()
     
+    # Save the mandlebrot set to an image
+    def saveMandlebrot(self):
+        if self.mandlebrotRendered:
+            # Ask for path
+            path = filedialog.asksaveasfilename(initialdir = os.getcwd(), title = "Save Mandlebrot Set", filetypes = (("PNG files", "*.png"), ("All files", "*.*")))
+            
+            if path != "":
+                # Save the image
+                self.mandlebrotSet.saveImage(path)
+
+                print("Saved mandlebrot set to " + path)
     
     #############################
 
@@ -1206,12 +1364,24 @@ class MandlebrotSetExplorer():
     
     def undoJuliaZoom(self):
         if len(self.juliaZoomHistory) > 0:
-            self.undoZoomMandlebrotButton.disable()
-            self.undoZoomJuliaButton.disable()
+            self.zoomOutMandlebrotButton.disable()
+            self.zoomOutJuliaButton.disable()
             
             self.juliaCustomCoords = self.juliaZoomHistory.pop()
             
             self.drawJuliaSet()
+    
+    # Save the julia set to an image
+    def saveJulia(self):
+        if self.juliaRendered:
+            # Ask for path
+            path = filedialog.asksaveasfilename(initialdir = os.getcwd(), title = "Save Julia Set", filetypes = (("PNG files", "*.png"), ("All files", "*.*")))
+            
+            if path != "":
+                # Save the image
+                self.juliaSet.saveImage(path)
+                
+                print("Saved julia set to " + path)
     #endregion
     
     # Update the info listed about the currently clicked point
@@ -1239,8 +1409,14 @@ class MandlebrotSetExplorer():
         info = self.computePointInfo(complex(xCoord, yCoord), iters)
         self.clickedPointPixel = (x, y)
         self.clickedPoint = complex(xCoord, yCoord)
-        self.clickedPointOrbitLabel.text = ("Orbit: " + str(info[0]))
-        self.orbitTooltip.text = ("Orbit: " + str(info[0]))
+        orbitStr = ""
+        for i in range(len(info[0])):
+            orbitStr += str(round(info[0][i].real, 3)) + " + " + str(round(info[0][i].imag, 3)) + "i"
+            if i < len(info[0]) - 1:
+                orbitStr += ", "
+        self.clickedPointOrbitLabel.text = ("Orbit: " + str(orbitStr))
+        self.clickedPointPeriodLabel.text = ("Period: 0")
+        self.orbitTooltip.text = ("Orbit: " + str(orbitStr))
         self.clickedPointItersLabel.text = ("Iterations: " + str(info[1]))
         self.clickedPointDivergedLabel.text = ("Diverged: " + str(info[2]))
 
@@ -1365,6 +1541,9 @@ class MandlebrotSetExplorer():
         self.mandlebrotCustomCoords = [bookmark[0][0] - 2, bookmark[0][1] - 2, bookmark[0][0] + 2, bookmark[0][1] + 2]
         self.drawMandlebrotSet()
         
+        if self.autoComputeJuliaSet and self.drawJuliaButton.isEnabled():
+            self.drawJuliaSet()
+        
         self.bookmarksWin.close()
     #endregion
 
@@ -1375,15 +1554,13 @@ class MandlebrotSetExplorer():
         
         #region Value change functions
         def mandlebrotIterations(value):
-            self.mandlebrotIterations = int(value)
+            self.mandlebrotIterations = max(1, int(value))
         
         def mandlebrotMethod(value):
-            if value == "Threshold":
+            if value == "Two-Tone":
                 self.mandlebrotDrawMethod = 1
-            elif value == "Smooth":
+            elif value == "Escape Colors":
                 self.mandlebrotDrawMethod = 2
-            elif value == "Random":
-                self.mandlebrotDrawMethod = 3
         
         def mandlebrotSound():
             self.mandlebrotSounds = self.mandlebrotSoundCheckBox.checked
@@ -1392,39 +1569,36 @@ class MandlebrotSetExplorer():
             self.snapToBookmarks = self.snapToBookmarksCheckBox.checked
         
         def juliaIterations(value):
-            self.juliaIterations = int(value)
+            self.juliaIterations = max(1, int(value))
         
         def juliaMethod(value):
-            if value == "Threshold":
+            if value == "Escape Colors":
                 self.juliaDrawMethod = 1
-            elif value == "Smooth":
+            elif value == "Two-Tone":
                 self.juliaDrawMethod = 2
-            elif value == "Random":
-                self.juliaDrawMethod = 3
         
         def juliaAutoCompute():
             self.autoComputeJuliaSet = self.autoComputeJuliaCheckBox.checked
-        
-        def sweeps(event):
-            self.renderSweeps = int(self.sweepsSlider.value)
         #endregion
         
         #region Mandlebrot set
-        with Stack(width = panelWidth * 0.9, relief = 'groove', borderwidth = 2):
-            Label("Mandlebrot Set", width = panelWidth, font = "Arial 10 bold")
+        mandlebrotFrame = HideableFrame(titleText = "Mandlebrot Set", titleFont = "Arial 10 bold", relief = 'groove', borderwidth = 2)
+        mandlebrotFrame.hide()
+        with mandlebrotFrame:
             self.drawMandlebrotButton = Button(text = "Draw", color = (120, 120, 240), width = panelWidth * 0.9, height = 40, cornerRadius = 10, command = self.drawMandlebrotSet)
             Tooltip(self.drawMandlebrotButton, "Draw the Mandlebrot set using the current settings.")
             
             with Flow():
                 Label("Iterations: ")
                 self.mandlebrotItersEntry = TextBox(width = int(panelWidth * 0.8), height = 20, text = str(self.mandlebrotIterations), inputType = "int", command = mandlebrotIterations)
+                self.mandlebrotItersEntry.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
                 Tooltip(self.mandlebrotItersEntry, "The number of iterations to use when computing the set. Higher values will take longer to compute, but will produce a more detailed image.")
             
             with Flow():
                 Label("Draw method: ")
-                self.mandlebrotMethodOptions = OptionsMenu("Two-Tone", "Escape Colors", "Weird", command = mandlebrotMethod)
+                self.mandlebrotMethodOptions = OptionsMenu("Escape Colors", "Two-Tone", command = mandlebrotMethod)
                 self.mandlebrotMethodOptions.option = "Escape Colors"
-                Tooltip(self.mandlebrotMethodOptions, "Threshold: Draw the set using a threshold (two-tone). Smooth: Draw the set using a smooth coloring method. Random: Draw the set using a random coloring method (very cool looking).")
+                Tooltip(self.mandlebrotMethodOptions, "Escape Colors: Draw the set using a smooth, gradiented coloring method. Two-Tone: Draw the set using a single color.")
 
             self.mandlebrotSoundCheckBox = CheckBox(text = "Hear the Mandlebrot Set!", command = mandlebrotSound)
             self.mandlebrotSoundCheckBox.checked = False
@@ -1462,8 +1636,9 @@ class MandlebrotSetExplorer():
         #endregion
         
         #region Julia Set
-        with Stack(relief = 'groove', borderwidth = 2, width = panelWidth * 0.9):
-            Label("Julia Set", width = panelWidth, font = "Arial 10 bold")
+        juliaFrame = HideableFrame(titleText = "Julia Set", titleFont = "Arial 10 bold", relief = 'groove', borderwidth = 2)
+        juliaFrame.hide()
+        with juliaFrame:
             self.drawJuliaButton = Button(text = "Draw", color = (120, 120, 240), width = panelWidth * 0.9, height = 40, cornerRadius = 10, command = self.drawJuliaSet)
             self.drawJuliaButton.disable()
             Tooltip(self.drawJuliaButton, "Click on the Mandlebrot set to select a point to use as the Julia set's seed.")
@@ -1472,16 +1647,17 @@ class MandlebrotSetExplorer():
             self.autoComputeJuliaCheckBox.checked = False
             Tooltip(self.autoComputeJuliaCheckBox, "Automatically compute the Julia set when the mouse is clicked on the Mandlebrot set.")
             
-            with Stack():
+            with Flow():
                 Label("Iterations: ")
-                self.juliaItersEntry = TextBox(width = int(panelWidth * 0.9), height = 20, text = str(self.juliaIterations), inputType = "int", command = juliaIterations)
+                self.juliaItersEntry = TextBox(width = int(panelWidth * 0.8), height = 20, text = str(self.juliaIterations), inputType = "int", command = juliaIterations)
+                self.juliaItersEntry.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
                 Tooltip(self.juliaItersEntry, "The number of iterations to use when computing the set. Higher values will take longer to compute, but will produce a more detailed image.")
                 
-            with Stack():
+            with Flow():
                 Label("Draw method: ")
-                self.juliaMethodOptions = OptionsMenu("Threshold", "Smooth", "Weird", command = juliaMethod)
-                self.juliaMethodOptions.option = "Smooth"
-                Tooltip(self.juliaMethodOptions, "Threshold: Draw the set using a threshold (two-tone). Smooth: Draw the set using a smooth coloring method. Random: Draw the set using a random coloring method (very cool looking).")
+                self.juliaMethodOptions = OptionsMenu("Escape Colors", "Two-Tone", command = juliaMethod)
+                self.juliaMethodOptions.option = "Escape Colors"
+                Tooltip(self.juliaMethodOptions, "Escape Colors: Draw the set using a nice-looking gradient (brute-force algorithm). Two-Tone: Draw the set using a single color (inverse algorithm).")
 
             #region Coordinates
             def startXJ(value):
@@ -1514,32 +1690,37 @@ class MandlebrotSetExplorer():
             #endregion
         #endregion
         
-        # Other
-        Label("Render sweeps (default = 4): ")
-        self.sweepsSlider = Slider(1, 16, value = self.renderSweeps, step = 1, width = int(panelWidth * 0.9), height = 30)
-        self.sweepsSlider.setInputCallback(sweeps)
-        Tooltip(self.sweepsSlider, "The number of sweeps used for drawing. Doesn't really seem to make an impact on draw speed (but it looks cool)")
-        
-        # Bookmarks
-        self.snapToBookmarksCheckBox = CheckBox(text = "Snap to bookmarks", command = snapping)
-        self.snapToBookmarksCheckBox.checked = True
-        Tooltip(self.snapToBookmarksCheckBox, "Snap to nearby bookmarks when clicking on the Mandlebrot set.")
-        
+        #region Bookmarks
+        bookmarksFrame = HideableFrame(titleText = "Bookmarks", titleFont = "Arial 10 bold", relief = 'groove', borderwidth = 2)
+        bookmarksFrame.hide()
+        with bookmarksFrame:
+            self.snapToBookmarksCheckBox = CheckBox(text = "Snap to bookmarks", command = snapping)
+            self.snapToBookmarksCheckBox.checked = True
+            Tooltip(self.snapToBookmarksCheckBox, "Snap to nearby bookmarks when clicking on the Mandlebrot set.")
+                            
+            self.addBookmarkButton = Button(text = "Add Bookmark", width = 100, height = 30, padding = 3, cornerRadius = 10, color = (100, 200, 200), textFont = "Arial 8 bold", command = self.addBookmark)
+            self.addBookmarkButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+            self.addBookmarkButton.disable()
+            
+            self.showBookmarksButton = Button(text = "Bookmarks", width = 100, height = 30, padding = 3, cornerRadius = 10, color = (100, 200, 200), textFont = "Arial 8 bold", command = self.showBookmarks)
+            self.showBookmarksButton.setHoverEffect(("grow/darken", (4, 4, (50, 50, 50))))
+        #endregion
         
         # Stats and info
-        # TODO: Implement this!!
-        # Label("Stats", width = panelWidth, font = "Arial 10 bold")
-        # with Stack(relief = 'groove', borderwidth = 2):
-        #     Label("Render time: Not implemented")
+        Label("Stats", width = panelWidth, font = "Arial 10 bold")
+        with Stack(relief = 'groove', borderwidth = 2):
+            self.mandlebrotRenderTimeLabel = Label("Mandlebrot render time: -s")
+            self.juliaRenderTimeLabel = Label("Julia render time: -s")
             
-        #     Label("Zoom factor: Not implemented")
+            self.zoomFactorLabel = Label("Zoom factor: Not implemented")
         
         # Selected point
-        Label("Selected point", font = "Arial 10 bold")
         with Stack(relief = "groove", borderwidth = 2): 
+            Label("Selected point", font = "Arial 10 bold")
             self.clickedPointLabel = Label("Clicked point: Nothing")
             self.clickedPointOrbitLabel = Label("Orbit: Nothing")
             self.orbitTooltip = Tooltip(self.clickedPointOrbitLabel, "Orbit: Nothing")
+            self.clickedPointPeriodLabel = Label("Period: Nothing")
             self.clickedPointItersLabel = Label("Iterations: Nothing")
             self.clickedPointDivergedLabel = Label("Diverged: Nothing")
 
@@ -1558,7 +1739,7 @@ class MandlebrotSetExplorer():
     # Show a help window with info about the program
     def showHelp(self):
         print("Showing help")
-        exit()
+        
         # TODO: Implement help boxes (boxes that show up next to buttons with info about them and a next button)
 
     # Custom close behavior callback
