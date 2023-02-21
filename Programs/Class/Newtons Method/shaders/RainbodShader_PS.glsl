@@ -86,23 +86,26 @@ vec2 cx_pow(vec2 a, float n) {
 
 
 //// MY CODE ////
-vec2 f(vec2 z) {
-	return cx_sub(cx_pow(z, 4), vec2(1, 0));
+vec2 f(vec2 z, vec2 c) {
+	return cx_add(cx_pow(z, 2), c);
 }
 
-vec2 fPrime(vec2 z) {
-	return cx_mul(vec2(4, 1), cx_pow(z, 3));
-}
 
-vec2 newtons(vec2 z) {
-	return cx_sub(z, cx_div(f(z), fPrime(z)));
-}
-
-vec2 iterate(vec2 z0, int n) {
+int iterate(vec2 c, int n) {
+	vec2 z = vec2(0, 0);
+	
     for(int i = 0; i < n; i++) {
-		z0 = newtons(z0);
+		z = f(z, c);
+		
+		if (cx_abs(z) > 2) {
+			return i;
+		}
 	}
-    return z0;
+    return n;
+}
+
+float remap(float min1, float max1, float min2, float max2, float val){
+	return min1 + (val - min1) * (max2 - min2) / (max1 - min1);
 }
 
 
@@ -110,10 +113,12 @@ vec2 iterate(vec2 z0, int n) {
 void main() {
 	vec2 offset = vec2(resolution.x / 2, resolution.y / 2);
     vec2 pt = vec2(gl_FragCoord.x - offset.x, gl_FragCoord.y - offset.y);
-    
+	vec2 remapped = vec2(remap(0, resolution.x, -1.5, 1.5, pt.x), remap(0, resolution.y, -1.5, 1.5, pt.y));
+   
     int iterations = int(min(1, time / 5.0) * 100.0);
-    vec2 iterResult = iterate(pt, iterations);
+    int iterResult = iterate(remapped, 100);
+    float val = iterResult / 100;
     
-    gl_FragColor = vec4(iterResult, 0.6, 1);
+    gl_FragColor = vec4(val, val, val, 1);
 }
 

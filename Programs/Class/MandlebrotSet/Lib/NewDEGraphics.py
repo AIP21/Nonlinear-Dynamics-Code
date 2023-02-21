@@ -304,16 +304,18 @@ class Window(tk.Toplevel):
         height (int): Height of the window
         **kw: Other arguments to pass to tk.Tk
     """
-    def __init__(self, title = "Window", width = 500, height = 500, **kw):
+    def __init__(self, title = "Window", width = 500, height = 500, x = 100, y= 100, **kw):
         tk.Toplevel.__init__(self)
         self.title(title)
         self.kw = kw
         self.width = width
         self.height = height
+        self.x = x
+        self.y = y
         
         self.protocol("WM_DELETE_WINDOW", self.close)
-        self.geometry('%dx%d' % (width, height))
-
+        self.geometry('%dx%d+%d+%d' % (self.width, self.height, self.x, self.y))
+    
     def close(self):
         self.destroy()
     
@@ -375,7 +377,7 @@ class Window(tk.Toplevel):
 
         _pack_side = TOP
         _root = self.frame
-        return self # was _root for some reason
+        return self # Was _root for some reason
      
     def __exit__(self, type, value, traceback):
         global _root, _pack_side
@@ -408,6 +410,12 @@ class Window(tk.Toplevel):
         
         # stop all ongoing _events
         [event.set() for event in _events]
+
+    def hideTitlebar(self):
+        self.wm_overrideredirect(True)
+        
+    def showTitlebar(self):
+        self.wm_overrideredirect(False)
 
 class Slot(tk.Frame):
     def __init__(self, **kw):
@@ -508,6 +516,7 @@ class HideableFrame(Slot):
     '''
     
     hidden = False
+    showHideButton = None
     
     def __init__(self, titleText = "", titleFont = "", align = TOP, **kw):
         self.kw = kw
@@ -521,7 +530,7 @@ class HideableFrame(Slot):
             self.headerFrame = Flow()
 
             with self.headerFrame:
-                self.showHideButton = Button("⏷", width = 30, height = 30, cornerRadius = 25, command = self.showHide)
+                self.showHideButton = Button("⏷", width = 30, height = 30, cornerRadius = 25, command = self.toggleHidden)
                 
                 if self.titleText != "":
                     self.title = Label(self.titleText, padx = 10, justify = 'left', font = self.titleFont)
@@ -529,7 +538,7 @@ class HideableFrame(Slot):
         self.subFrame = tk.Frame(self)
         self.subFrame.pack(side = self.align, fill = tk.X)
     
-    def showHide(self):        
+    def toggleHidden(self):
         if self.hidden:
             self.show()
         else:
@@ -709,6 +718,18 @@ class Button(tk.Canvas):
         self.bind('<Leave>', self.hoverExit)
     
         self.pack(side = _pack_side)
+    
+    def setColor(self, color):
+        '''
+        Set the button's color
+        '''
+        
+        self.color = color
+        self.rect.color = colorRGB(*self.color)
+        self.rect.draw()
+        
+        # Keep text on top
+        self.lift(self.label)
     
     def setHoverEffect(self, hoverEffect):
         '''
@@ -891,7 +912,7 @@ class Label(tk.Label):
     @text.setter
     def text(self, text):
         self.textvariable.set(text)
-        
+
 class Message(tk.Message):
     def __init__(self, text = "", **kw):
         self.kw = kw
@@ -942,7 +963,7 @@ class loop(threading.Thread):
     def run(self):
         while not self.stopped.isSet():
             self.func()
-            
+
 class TextBox(tk.Frame):
     hoverEffect = ("grow/darken", (4, 4, (20, 20, 20)))
     enabled = False
@@ -1405,7 +1426,9 @@ class ListBox(tk.Listbox):
 
 class Image(tk.Canvas):
     '''
-    An image. Takes an image file from path. 
+    An image. Takes an image file from path or from a PIL image (requires PIL to be installed to create from a PIL image). 
+    
+    Supported image file formats: PGM, PPM, GIF, and PNG
     '''
     
     def __init__(self, width, height, path = None, image = None, resizeImage = True, resizeKeepAspectRatio = True, imageWidth = None, imageHeight = None):
@@ -1420,28 +1443,30 @@ class Image(tk.Canvas):
             resizeKeepAspectRatio: Whether or not to keep the aspect ratio of the image when resizing
         '''
         
-        self.imgWidth = imageWidth or width
-        self.imgHeight = imageHeight or height
+        self.width = width
+        self.height = height
+        self.imgWidth = imageWidth or self.width
+        self.imgHeight = imageHeight or self.height
         self.image = None
         
         super().__init__(_root, width = width, height = height, bd = 0, highlightthickness = 0)
         
-        self.img = self.create_image(width / 2, height / 2, image = self.image, anchor = tk.CENTER)
-        
+        self.img = None
+        self.imageObj = None
+                
         # Set the image
-        if image:
+        if image:            
             self.setImage(image, resizeImage, resizeKeepAspectRatio)
         elif path:
-            self.setPath(path, resizeImage, resizeKeepAspectRatio)
-        
-        # Make sure the image is always centered
-        self.bind("<Configure>", self._resize)
+            self.setPath(path)
         
         self.pack(side = _pack_side)
     
     def setImage(self, image, resize = True, resizeKeepAspectRatio = True):
         '''
-        Set the image of this Image object
+        Set the image of this Image object to a PIL image object
+        
+        REQUIRES PIL TO BE INSTALLED
         
         Args:
             image: The image to set
@@ -1449,92 +1474,41 @@ class Image(tk.Canvas):
             resizeKeepAspectRatio: Whether or not to keep the aspect ratio of the image when resizing
         '''
         
-        if resize:
-            img = resizeImage(image, size = (self.imgWidth, self.imgHeight), keep_aspect_ratio = resizeKeepAspectRatio)
-        else:
-            img = image
-                
         if hasPIL:
-            self.image = ImageTK.PhotoImage(master = _root, image = img)
+            if resize:
+                img = resizeImage(image, size = (self.imgWidth, self.imgHeight), keep_aspect_ratio = resizeKeepAspectRatio)
+            else:
+                img = image
+
+            self.img = ImageTK.PhotoImage(master = _root, image = img, width = self.width, height = self.height)
+            
+            if self.imageObj == None:
+                self.imageObj = self.create_image(0, 0, image = self.img, anchor = tk.NW)
+            else:
+                self.itemconfig(self.imageObj, image = self.img)
         else:
             print("PIL not installed. Cannot set image from image object")
-        
-        self.itemconfig(self.img, image = self.image)
-        self.pack(side = _pack_side)
     
-    def setPath(self, path, resize = True, resizeKeepAspectRatio = True):
+    def setPath(self, path):
         '''
-        Set the image of this Image object
+        Set the image of this Image object to a file path
+        
+        Supported image formats: PGM, PPM, GIF, and PNG
         
         Args:
             path: The path to the image to set
-            resize: Whether or not to resize the image to the size of this widget or the size specified in the constructor
-            resizeKeepAspectRatio: Whether or not to keep the aspect ratio of the image when resizing
         '''
-        if hasPIL:
-            self.setImage(PImage.open(path), resize, resizeKeepAspectRatio)
-        else:
-            print("PIL not installed. Cannot set image from path.")
-    
-    def setWidth(self, width):
-        '''
-        Set the width of this Image object
         
-        Args:
-            width: The width to set
-        '''
-        self.config(width = width)
-        self.pack(side = _pack_side)
-    
-    def setHeight(self, height):
-        '''
-        Set the height of this Image object
-        
-        Args:
-            height: The height to set
-        '''
-        self.config(height = height)
-        self.pack(side = _pack_side)
-    
-    def setDimensions(self, width, height):
-        '''
-        Set the width and height of this Image object
-        
-        Args:
-            width: The width to set
-            height: The height to set
-        '''
-        self.config(width = width, height = height)
-        self.pack(side = _pack_side)
-    
-    def _resize(self, event):
-        if self.image == None:
+        if ".jpg" in path:
+            print("WARNING: JPG images are not supported. Use PNG or GIF instead")
             return
-        
-        # Resize the image
-        # self.resizeImage(event.width, event.height)
-        
-        # Center the image
-        self.coords(self.img, event.width / 2, event.height / 2)
     
-    def resizeImage(self, width, height):
-        '''
-        Resize the image of this Image object
+        self.img = tk.PhotoImage(master = _root, width = self.width, height = self.height, file = path)
         
-        Args:
-            width: The width to resize to
-            height: The height to resize to
-        '''
-        img = resizeImage(self.image, size = (width, height), keep_aspect_ratio = True)
-        
-        if hasPIL:
-            self.image = ImageTk.PhotoImage(master = _root, image = img)
+        if self.imageObj == None:
+            self.imageObj = self.create_image(0, 0, image = self.img, anchor = tk.NW)
         else:
-            print("PIL not installed. Cannot resize image.")
-        
-        
-        self.itemconfig(self.img, image = self.image)
-        self.pack(side = _pack_side)
+            self.itemconfig(self.imageObj, image = self.img)
     
     def setOnClick(self, func):
         '''
@@ -1553,24 +1527,6 @@ class Image(tk.Canvas):
             func: The function to call
         '''
         self.bind("<Button-3>", func)
-    
-    def getWidth(self):
-        '''
-        Get the width of this Image object
-        
-        Returns:
-            The width of this Image object
-        '''
-        return self.winfo_width()
-
-    def getHeight(self):
-        '''
-        Get the height of this Image object
-        
-        Returns:
-            The height of this Image object
-        '''
-        return self.winfo_height()
 
 class Plot(tk.Canvas):
     '''
@@ -2097,6 +2053,107 @@ class Slider(tk.Canvas):
         
         # Hide the thumb
         self.thumb.undraw()
+
+class Popup:
+    def __init__(self, widget, text, closeButtonText = "X", xOffset = 10, yOffset = 10, **kwargs):
+        """
+        A popup window that shows next to a given widget. It also has a button to close the window
+        
+        Args:
+            widget: The target widget. The popup will appear next to it
+            text: Popup text
+            closeButtonText: The label of the close button
+            xOffset(int): x - offset (pixels) of popup box from mouse pointer
+            yOffset(int): y - offset (pixels) of popup box from mouse pointer
+            kwargs: parameters to be passed to popup label, e.g: , background = 'red', foreground = 'blue', etc
+        """
+        self.widget = widget
+        self._text = text
+        self.xOffset = xOffset
+        self.yOffset = yOffset
+        self.kwargs = kwargs
+        self.popupWindow = None
+        self.label = None
+        self.id = None
+        self.closeCommand = None
+        self.closeButtonText = closeButtonText
+
+    def __del__(self):
+        try:
+            self.hide()
+        except tk.TclError:
+            pass
+
+    @property
+    def text(self):
+        return self._text
+
+    @text.setter
+    def text(self, txt):
+        self._text = txt
+        self.setText(txt)
+
+    def setTarget(self, target):
+        self.widget = target
+        self.hide()
+        self.show()
+
+    def setText(self, text):
+        self._text = text
+        try:
+            self.label.config(text = text)
+        except:
+            pass
+
+    def show(self):
+        if self.popupWindow:
+            return
+
+        # tip text should be displayed away from the mouse pointer to prevent triggering leave event
+        x = int(self.widget.winfo_rootx()) + self.xOffset
+        y = int(self.widget.winfo_rooty()) + self.yOffset
+
+        self.popupWindow = win = tk.Toplevel(self.widget, bg = 'white', borderwidth = 1, relief = tk.SOLID)
+
+        # Hide the border on the top level window
+        win.wm_overrideredirect(True)
+
+        self.label = tk.Label(win, text = self.text, justify = LEFT, padx = 5, pady = 2, background = 'white')
+        self.popupWindow.bind('<Configure>', lambda event: self.label.config(wraplength = 300))
+
+        lbl = self.label
+        self.kwargs['background'] = self.kwargs.get('background') or self.kwargs.get('bg') or 'white'
+        self.kwargs['foreground'] = self.kwargs.get('foreground') or self.kwargs.get('fg') or 'black'
+        configureWidget(lbl, **self.kwargs)
+        
+        self.closeButton = tk.Button(win, text = self.closeButtonText, width = 20, command = self.close)
+
+        # Get text width using font, because .winfo_width() needs to call "update_idletasks()" to get correct width
+        font = tkFont.Font(font = lbl['font'])
+        lineCount = font.measure(self.label.cget('text')) / 300
+        textWidth = font.measure(self.label.cget('text'))
+
+        # Correct the position to keep the popup inside the screen
+        if (x + (textWidth / lineCount) + 20) > lbl.winfo_screenwidth():
+            x = _root.winfo_screenwidth() - (textWidth / lineCount) - 20
+        
+        win.wm_geometry("+%d+%d" % (x, y))
+        self.label.pack(side = TOP, fill = 'both', pady = (5, 0))
+        self.closeButton.pack(pady = (10, 10))
+    
+    def close(self):
+        if self.closeCommand != None:
+            self.closeCommand()
+        
+        self.hide()
+    
+    def hide(self):
+        if self.popupWindow:
+            self.popupWindow.destroy()
+            self.popupWindow = None
+
+    def registerCloseCommand(self, command):
+        self.closeCommand = command
 
 #region Shape graphics stuff
 class GraphicsObject:
@@ -2628,7 +2685,7 @@ class Tooltip:
 
         # Correct the position to keep the tooltip inside the screen
         if (x + (textWidth / lineCount) + 20) > lbl.winfo_screenwidth():
-            x = _root.winfo_screenwidth() - (textWidth / lineCount) - 20
+            x = self.widget.master.winfo_screenwidth() - (textWidth / lineCount) - 20
         
         tw.wm_geometry("+%d+%d" % (x, y))
         lbl.pack()

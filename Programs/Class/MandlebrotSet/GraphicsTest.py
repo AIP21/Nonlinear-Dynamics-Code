@@ -330,6 +330,12 @@ with win:
     
     Separator(renderSize[0], 1, 5, 5)
     
+    # Get this class' file directory
+    import os
+    dir = os.path.dirname(os.path.realpath(__file__))
+    
+    img = Image(path = dir + "/data/fractal1.png", width = 50, height = 50)
+    
     sweepsSlider = Slider(0, 16, value = sweeps, step = 1, width = renderSize[0], height = 30)
     Tooltip(sweepsSlider, "The number of threads to use for computing the mandlebrot set and julia set. (Default: 16) Warning: Setting this too high may cause your computer to lag!")
     
