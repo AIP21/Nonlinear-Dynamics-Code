@@ -146,7 +146,7 @@ class DEGraphWin(tk.Tk):
     
     dragStart = (0, 0)
     
-    def __init__(self, title = "Window", width = 500, height = 500, showScrollbar = False, edgePadding = [10, 10, 10, 10], **kw):
+    def __init__(self, title = "Window", width = 500, height = 500, showScrollbar = False, edgePadding = [0, 0, 0, 0], **kw):
         tk.Tk.__init__(self, **kw)
         self.title(title)
         self.kw = kw
@@ -1032,7 +1032,7 @@ class TextBox(tk.Frame):
         executeOnType: Whether or not to execute the command function on every key press
         padding: Padding around the text box
         cornerRadius: Corner radius of the text box
-        inputType: Type of input. Can be 'text', 'int', or 'float'
+        inputType: Type of input. Can be 'text', 'int', or 'decimal'
         color: Color of the text box
         textColor: Color of the text
     '''
@@ -1164,7 +1164,7 @@ class TextBox(tk.Frame):
             
             if self.executeOnType:
                 self.submit(None, newText)
-        elif self.type == 'float' and isFloat(newText):
+        elif self.type == 'decimal' and isFloat(newText):
             # Set text color to black
             self.entry.config(foreground = colorRGB(*self.textColor))
             self.validInput = True
@@ -1194,6 +1194,10 @@ class TextBox(tk.Frame):
             # Unfocus this entry if this wasn't called by typing
             if not newText:
                 _root.focus()
+    
+    def setInputCallback(self, callback, *args):
+        self.validateCommand = callback
+        self.commandArgs = args
     
     @property
     def text(self):
@@ -2105,6 +2109,66 @@ class Slider(tk.Canvas):
         # Hide the thumb
         self.thumb.undraw()
 
+class SliderWithTextInput(Flow):    
+    def __init__(self, start, end, value, width, height, step = 0, command = "", labelText = "", suffix = "", padding = [20, 10], cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = "Arial 8 bold", labelColor = (255, 255, 255),**kwargs):
+        super().__init__()
+        
+        self.command = command
+        
+        with self:
+            # Create a label
+            self.label = Label(labelText)
+            
+            # Create the slider
+            self.slider = Slider(start, end, value, width - 100, height, step, suffix, padding, cornerRadius, color, backgroundColor, labelFont, labelColor, **kwargs)
+            
+            # Create the text input
+            self.textInput = TextBox(100, height, str(value), command = self.onTextInput, font = labelFont)
+
+        # Set the text input value
+        self.textInput.text = str(value)
+        
+        # Set the slider callback
+        self.slider.setInputCallback(self.onSliderInput)
+    
+    def getValue(self):
+        return self.slider.getValue()
+    
+    def onTextInput(self, event):
+        # Set the slider value
+        self.slider.setValue(float(self.textInput.text))
+        
+        if self.command != None:
+            self.command(self.slider.getValue())
+        
+    def onSliderInput(self, event):
+        # Set the text input value
+        self.textInput.text = str(self.slider.getValue())
+        
+        if self.command != None:
+            self.command(self.slider.getValue())
+            
+    def setValue(self, newValue):
+        self.slider.setValue(newValue)
+        self.textInput.text = str(newValue)
+    
+    def enable(self):
+        self.slider.enable()
+        self.textInput.enable()
+    
+    def disable(self):
+        self.slider.disable()
+        self.textInput.disable()
+    
+    def setInputCallback(self, func):
+        '''
+        Set the function to call when the user drags the slider
+        
+        Args:
+            func: The function to call
+        '''
+        self.command = func
+
 class Popup:
     def __init__(self, widget, text, closeButtonText = "X", xOffset = 10, yOffset = 10, **kwargs):
         """
@@ -2364,10 +2428,10 @@ class Polygon(GraphicsObject):
     def _draw(self):
         self.id = self.canvas.create_polygon(self.points, outline = self.outline, fill = self.color)
 
-    def get_points(self):
+    def getPoints(self):
         return self.points
 
-    def set_points(self, points):
+    def setPoints(self, points):
         self.points = points
 
 # Image
