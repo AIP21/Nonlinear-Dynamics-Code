@@ -1,3 +1,11 @@
+"""
+This version of DEGraphics was created by Alexander Irausquin-Petit for AT Nonlinear Dynamics.
+I wrote this from the ground up to be fast, easy to use, extensible, and good-looking all while sticking to Tkinter.
+
+I used some code from other python libraries on GitHub, and have modified it to fit my needs.
+Any code that I did not write myself is marked with a comment above the function or region of code, it contains the link to the GitHub repository where I found that code.
+"""
+
 from contextlib import contextmanager
 from decimal import Decimal
 import struct
@@ -17,6 +25,7 @@ try: # python 3
     from tkinter import Image
     from tkinter import PhotoImage
     from tkinter import TclError
+    from tkinter import colorchooser
 
     try:
         from PIL import Image as PImage, ImageTk, ImageColor, ImageDraw, ImageFilter
@@ -98,33 +107,33 @@ except ImportError: # python 2
     
     from Tkinter import TRUE
     from Tkinter import FALSE
-    
+
 _root = None
 _pack_side = None
 _canvas = None
+
 _events = []
 _radioVariable = None
 DEFAULT_COLOR = '#333'
 
 class AutoScrollbar(Scrollbar):
     """
-    A scrollbar that hides itself if it's not needed.  only
-    Works if you use the grid geometry manager.
+    A scrollbar that hides itself if it's not needed.
+    Only works if you use the grid geometry manager.
     """
-    def set(self, lo, hi):
-        if float(lo) <=  0.0 and float(hi) >=  1.0:
-            # grid_remove is currently missing from Tkinter!
+    def set(self, min, max):
+        if float(min) <=  0.0 and float(max) >=  1.0:
             self.tk.call("grid", "remove", self)
         else:
             self.grid()
-            
-        Scrollbar.set(self, lo, hi)
+        
+        Scrollbar.set(self, min, max)
         
     def pack(self, **kw):
-        raise TclError("cannot use pack with this widget")
+        raise TclError("Cannot use pack with this widget")
     
     def place(self, **kw):
-        raise TclError("cannot use place with this widget")
+        raise TclError("Cannot use place with this widget")
 
 class DEGraphWin(tk.Tk):
     """
@@ -146,19 +155,20 @@ class DEGraphWin(tk.Tk):
     
     dragStart = (0, 0)
     
-    def __init__(self, title = "Window", width = 500, height = 500, showScrollbar = False, edgePadding = [0, 0, 0, 0], **kw):
-        tk.Tk.__init__(self, **kw)
+    def __init__(self, title = "DE Graphics Window", width = 500, height = 500, showScrollbar = False, edgePadding = [0, 0, 0, 0], debugMode = False, **kw):
+        tk.Tk.__init__(self, sync = debugMode, **kw)
         self.title(title)
         self.kw = kw
         self.width = width
         self.height = height
         self.showScrollbar = showScrollbar
         self.edgePadding = edgePadding
+        self.debugMode = debugMode
         
         # Set close protocol (x button on window top bar)
         self.protocol("WM_DELETE_WINDOW", self.close)
         
-        # Set color to be used for background blur
+        # Set color to be used for background blur  
         # self.config(bg = 'green')
         # self.wm_attributes("-transparent", 'green')
         
@@ -185,7 +195,7 @@ class DEGraphWin(tk.Tk):
         self.destroy()
     
     def onMouseWheel(self, event):
-        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        self.canvas.yview_scroll(int(-1 * event.delta), 'units')
      
     def setOnClick(self, func):
         '''
@@ -217,7 +227,7 @@ class DEGraphWin(tk.Tk):
             self.vscrollbar.grid(row = 0, column = 1, sticky = N+S)
 
             # Create canvas
-            self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
+            self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, highlightthickness = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
             self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
 
             # Configure scroll bar for canvas
@@ -227,7 +237,7 @@ class DEGraphWin(tk.Tk):
             self.canvas.bind_all("<MouseWheel>", self.onMouseWheel)
         else:
             # Create canvas
-            self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0)
+            self.canvas = tk.Canvas(self, bd = 0, highlightthickness = 0, borderwidth = 0)
             self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
 
         # Make the canvas expandable
@@ -235,7 +245,7 @@ class DEGraphWin(tk.Tk):
         self.grid_columnconfigure(0, weight = 1)
 
         # Create frame in canvas
-        self.frame = tk.Frame(self.canvas, borderwidth = 0, bd = 0)
+        self.frame = tk.Frame(self.canvas, borderwidth = 0, highlightthickness = 0, bd = 0)
         self.frame.columnconfigure(0, weight = 1)
         self.frame.columnconfigure(1, weight = 1)
         
@@ -293,9 +303,8 @@ class DEGraphWin(tk.Tk):
         [event.set() for event in _events]
 
 class Window(tk.Toplevel):
-    dragStart = (0, 0)
-    
-    """Window for displaying anything.
+    """
+    A window for displaying anything.
     
     Usage:
         win = Window(title = "Test Window", width = 100, height = 100)
@@ -308,7 +317,12 @@ class Window(tk.Toplevel):
         height (int): Height of the window
         **kw: Other arguments to pass to tk.Tk
     """
-    def __init__(self, title = "Window", width = 500, height = 500, x = 100, y= 100, **kw):
+    
+    dragStart = (0, 0)
+    showScrollbar = False
+    edgePadding = (10, 10, 10, 10)
+    
+    def __init__(self, title = "Window", width = 500, height = 500, x = 100, y = 100, edgePadding = (10, 10, 10, 10), showScrollbar = False, **kw):
         tk.Toplevel.__init__(self)
         self.title(title)
         self.kw = kw
@@ -316,6 +330,8 @@ class Window(tk.Toplevel):
         self.height = height
         self.x = x
         self.y = y
+        self.edgePadding = edgePadding
+        self.showScrollbar = showScrollbar
         
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.geometry('%dx%d+%d+%d' % (self.width, self.height, self.x, self.y))
@@ -323,8 +339,8 @@ class Window(tk.Toplevel):
     def close(self):
         self.destroy()
     
-    def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    def onMouseWheel(self, event):
+        self.canvas.yview_scroll(int(-1 * event.delta), 'units')
      
     def setOnClick(self, func):
         '''
@@ -347,99 +363,175 @@ class Window(tk.Toplevel):
     def remove(self, item):
         self.canvas.delete(item.id)
     
+    def hideTitlebar(self):
+        self.wm_overrideredirect(True)
+    
+    def showTitlebar(self):
+        self.wm_overrideredirect(False)
+    
     def __enter__(self):
         global _root, _pack_side
 
-        # Create scroll bar
-        self.vscrollbar = AutoScrollbar(self)
-        self.vscrollbar.grid(row = 0, column = 1, sticky = N+S)
+        if self.showScrollbar:
+            # Create scroll bar
+            self.vscrollbar = AutoScrollbar(self)
+            self.vscrollbar.grid(row = 0, column = 1, sticky = N+S)
 
-        # Create canvas
-        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
-        self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
+            # Create canvas
+            self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, highlightthickness = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
+            self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
 
-        # Configure scroll bar for canvas
-        self.vscrollbar.config(command = self.canvas.yview)
+            # Configure scroll bar for canvas
+            self.vscrollbar.config(command = self.canvas.yview)
+
+            # Bind mouse wheel to canvas
+            self.canvas.bind_all("<MouseWheel>", self.onMouseWheel)
+        else:
+            # Create canvas
+            self.canvas = tk.Canvas(self, bd = 0, highlightthickness = 0, borderwidth = 0)
+            self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
 
         # Make the canvas expandable
         self.grid_rowconfigure(0, weight = 1)
         self.grid_columnconfigure(0, weight = 1)
 
         # Create frame in canvas
-        self.frame = tk.Frame(self.canvas, borderwidth = 0, bd = 0)
+        self.frame = tk.Frame(self.canvas, borderwidth = 0, highlightthickness = 0, bd = 0)
         self.frame.columnconfigure(0, weight = 1)
         self.frame.columnconfigure(1, weight = 1)
         
-        self.frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(
-                scrollregion = self.canvas.bbox("all")
-            ),
-        )
-
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        if self.showScrollbar:
+            # Configure scroll region in frame
+            self.frame.bind(
+                "<Configure>",
+                lambda e: self.canvas.configure(
+                    scrollregion = self.canvas.bbox("all")
+                ),
+            )
 
         _pack_side = TOP
         _root = self.frame
-        return self # Was _root for some reason
+        return self # Duct tape for a dumb bug, was _root for some reason
      
     def __exit__(self, type, value, traceback):
         global _root, _pack_side
         
-        # puts tkinter widget onto canvas
-        self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(self.canvas.config()['width'][4])-int(self.vscrollbar.config()['width'][4]))
+        if self.showScrollbar:
+            # Puts tkinter widget onto canvas
+            self.canvas.create_window(self.edgePadding[0], self.edgePadding[1], anchor = NW, window = self.frame, width = int(self.canvas.config()['width'][4]) - int(self.vscrollbar.config()['width'][4]) - self.edgePadding[2] * 2, height = int(self.canvas.config()['height'][4]) - self.edgePadding[3] * 2)
+        
+            # Handle the canvas being resized
+            def resize_canvas(event):
+                self.canvas.create_window(self.edgePadding[0], self.edgePadding[1], anchor = NW, window = self.frame, width = int(event.width) - int(self.vscrollbar.config()['width'][4]) - self.edgePadding[2] * 2, height = int(event.height) - self.edgePadding[3] * 2)
+        
+            # Set canvas scroll region to the entire canvas
+            self.canvas.config(scrollregion = self.canvas.bbox("all"))
+        else:
+            self.canvas.create_window(self.edgePadding[0], self.edgePadding[1], anchor = NW, window = self.frame, width = int(self.canvas.config()['width'][4]) - self.edgePadding[2] * 2, height = int(self.canvas.config()['height'][4]) - self.edgePadding[3] * 2)
 
-        # deal with canvas being resized
-        def resize_canvas(event):
-            self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(event.width)-int(self.vscrollbar.config()['width'][4]))
+            # Handle the canvas being resized
+            def resize_canvas(event):
+                self.canvas.create_window(self.edgePadding[0], self.edgePadding[1], anchor = NW, window = self.frame, width = int(event.width) - self.edgePadding[2] * 2, height = int(event.height) - self.edgePadding[3] * 2)
+        
         self.canvas.bind("<Configure>", resize_canvas)
-
-        # updates geometry management
+        
+        # Update the geometry management
         self.frame.update_idletasks()
 
-        # set canvas scroll region to all of the canvas
-        self.canvas.config(scrollregion = self.canvas.bbox("all"))
-
-        # set minimum window width
+        # Set min window width
         self.update()
         self.minsize(self.winfo_width(), 0)
         self.config(**self.kw)
         
         self.frame.update()
         
-        # start mainloop
+        # Start mainloop
         self.mainloop()
                 
         _pack_side = None
         
-        # stop all ongoing _events
+        # Stop all ongoing _events
         [event.set() for event in _events]
-
-    def hideTitlebar(self):
-        self.wm_overrideredirect(True)
-        
-    def showTitlebar(self):
-        self.wm_overrideredirect(False)
 
 class Canvas(tk.Canvas):
     '''
     A canvas that can be used to draw GraphicsObjects on.
-    Widgets cannot be placed on here!
     '''
-    def __init__(self, **kw):
+    offset = (0, 0)
+    zoom = 1
+    
+    pressed = False
+    dragging = False
+    offsetPreDrag = (0, 0)
+    dragOffset = (0, 0)
+    
+    drawnObjects = []
+    
+    def __init__(self, widgetAlignment = 'top', **kw):
         self.kw = kw
+        self.widgetAlignment = widgetAlignment
         
     def __enter__(self):
         global _root, _pack_side, _canvas
-        self._canvas_old = _canvas
-        tk.Canvas.__init__(self, _root, bd = 0, borderwidth = 0, **self.kw)
+        self._rootOld = _root
+        self._canvasOld = _canvas
+        
+        tk.Canvas.__init__(self, _root, bd = 0, highlightthickness = 0, borderwidth = 0, **self.kw)
         self.pack(side = _pack_side, fill = 'both', expand = True)
         # self.canvas.pack()
         _canvas = self
+        _root = self
+        
+        self.width = self.winfo_width()
+        self.height = self.winfo_height()
+        
+        self.bind("<ButtonPress-1>", self.onMouseDown)
+        self.bind("<B1-Motion>", self.onMouseDrag)
+        self.bind("<ButtonRelease-1>", self.onMouseUp)
+        self.bind("<MouseWheel>", self.onMouseWheel)
     
     def __exit__(self, type, value, traceback):
-        global _canvas
-        _canvas = self._canvas_old
+        global _root, _canvas
+        _root = self._rootOld
+        _canvas = self._canvasOld
+    
+    def onMouseWheel(self, event):
+        if not self.dragging:
+            # Zoom in and out of the center of the screen
+            if event.delta > 0:
+                self.zoom *= 1.1
+            else:
+                self.zoom /= 1.1
+            
+            # Update offset to keep the center of the screen in the same place
+            # self.offset = (self.offset[0] - (self.width * self.zoom) / 2, self.offset[1] - (self.height * self.zoom) / 2)
+            
+            self.updateInteractibleDrawn()
+        
+        self.updateInteractibleDrawn()
+    
+    def onMouseDown(self, event):
+        self.startDrag = (event.x, event.y)
+        self.offsetPreDrag = self.offset
+        self.pressed = True
+    
+    def onMouseDrag(self, event):
+        if self.pressed:
+            self.dragging = True
+
+            self.offset = (self.offsetPreDrag[0] + (event.x - self.startDrag[0]), self.offsetPreDrag[1] + (event.y - self.startDrag[1]))
+            self.updateInteractibleDrawn()
+    
+    def onMouseUp(self, event):
+        self.dragging = False
+        self.pressed = False
+        
+        self.updateInteractibleDrawn()
+    
+    def updateInteractibleDrawn(self):
+        for obj in self.drawnObjects:
+            if obj.shouldPanZoom:
+                obj.draw()
     
     def setOnClick(self, func):
         '''
@@ -467,7 +559,35 @@ class Canvas(tk.Canvas):
             func: The function to call
         '''
         self.bind("<B1-Motion>", func)
-
+    
+    def addDrawn(self, obj):
+        '''
+        Add a GraphicsObject to the canvas
+        
+        Args:
+            obj: The GraphicsObject to add
+        '''
+        if obj not in self.drawnObjects:
+            self.drawnObjects.append(obj)
+    
+    def removeDrawn(self, obj):
+        '''
+        Remove a GraphicsObject from the canvas
+        
+        Args:
+            obj: The GraphicsObject to remove
+        '''
+        self.drawnObjects.remove(obj)
+        self.delete(obj.id)
+    
+    def resetView(self):
+        '''
+        Reset the view of the canvas
+        '''
+        self.offset = (0, 0)
+        self.zoom = 1
+        self.updateInteractibleDrawn()
+    
 class Slot(tk.Frame):
     def __init__(self, **kw):
         self.kw = kw
@@ -477,7 +597,7 @@ class Slot(tk.Frame):
         self._root_old = _root
         self._pack_side_old = _pack_side
         tk.Frame.__init__(self, self._root_old, **self.kw)
-        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0)
+        self.canvas = tk.Canvas(self, bd = 0, highlightthickness = 0, borderwidth = 0)
         self.pack(side = self._pack_side_old, fill = 'both')
         _root = self
     
@@ -563,17 +683,18 @@ class HideableFrame(Slot):
     Can be hidden or shown by clicking its arrow button
     
     args:
-        align: TOP, BOTTOM, LEFT, RIGHT
+        align: top, bottom, left, right
     '''
     
     hidden = False
     showHideButton = None
     
-    def __init__(self, titleText = "", titleFont = "", align = TOP, **kw):
+    def __init__(self, titleText = "", titleFont = "", align = "top", depth = 0, **kw):
         self.kw = kw
         self.titleText = titleText
         self.titleFont = titleFont if titleFont != "" else "Arial 12 bold"
         self.align = align
+        self.depth = depth
     
         self.subFrame = None
 
@@ -581,14 +702,49 @@ class HideableFrame(Slot):
             self.headerFrame = Flow()
 
             with self.headerFrame:
+                # Indent based on depth
+                self.indent = Label("", width = self.depth * 5)
+                
+                # Show/hide button
                 self.showHideButton = Button("⏷", width = 30, height = 30, cornerRadius = 25, command = self.toggleHidden)
                 
+                # Title text
                 if self.titleText != "":
                     self.title = Label(self.titleText, padx = 10, justify = 'left', font = self.titleFont)
             
         self.subFrame = tk.Frame(self)
         self.subFrame.pack(side = self.align, fill = tk.X)
+        
+        # Toggle on click
+        self.headerFrame.bind("<ButtonPress-1>", lambda func: self.toggleHidden())
+        if self.titleText != "":
+            self.title.bind("<ButtonPress-1>", lambda func: self.toggleHidden())
+        
+        # Hover effect
+        self.originalBg = self.headerFrame.cget("bg")
+        self.headerFrame.bind("<Enter>", self.hoverEnter)
+        self.headerFrame.bind("<Leave>", self.hoverLeave)
+        
+        self.show()
     
+    def hoverEnter(self, func):
+        hoverColor = colorRGB(230, 230, 230)
+        
+        self.headerFrame.config(bg = hoverColor)
+        self.showHideButton.config(bg = hoverColor)
+        self.indent.config(bg = hoverColor)
+        
+        if self.titleText != "":
+            self.title.config(bg = hoverColor)
+    
+    def hoverLeave(self, func):
+        self.headerFrame.config(bg = self.originalBg)
+        self.showHideButton.config(bg = self.originalBg)
+        self.indent.config(bg = self.originalBg)
+
+        if self.titleText != "":
+            self.title.config(bg = self.originalBg)
+        
     def toggleHidden(self):
         if self.hidden:
             self.show()
@@ -597,7 +753,7 @@ class HideableFrame(Slot):
     
     def hide(self):
         self.hidden = True
-        self.showHideButton.text = "⏶"
+        self.showHideButton.text = "⏵"
         
         # Hide subframe
         self.subFrame.pack_forget()
@@ -634,7 +790,7 @@ class HideableFrame(Slot):
 
 class ScrollableFrame(tk.Frame):
     """
-    A frame that you can scroll through. It has a scroll bar
+    A frame that you can scroll through. It has a scroll bar.
     
     Usage:
         with ScrollableFrame():
@@ -644,6 +800,9 @@ class ScrollableFrame(tk.Frame):
     def __init__(self, **kw):
         self.kw = kw
     
+    def onMouseWheel(self, event):
+        self.canvas.yview_scroll(int(-1 * event.delta), 'units')
+
     def __enter__(self):
         global _root, _pack_side
         self._root_old = _root
@@ -654,8 +813,12 @@ class ScrollableFrame(tk.Frame):
         self.vscrollbar = AutoScrollbar(self)
         self.vscrollbar.grid(row = 0, column = 1, sticky = N+S)
 
+        # Make the canvas expandable
+        self.grid_rowconfigure(0, weight = 1)
+        self.grid_columnconfigure(0, weight = 1)
+
         # Create canvas
-        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
+        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, highlightthickness = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
         self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
 
         # Configure scroll bar for canvas
@@ -663,13 +826,9 @@ class ScrollableFrame(tk.Frame):
 
         # Bind mouse wheel to canvas
         self.canvas.bind_all("<MouseWheel>", self.onMouseWheel)
-
-        # Make the canvas expandable
-        self.grid_rowconfigure(0, weight = 1)
-        self.grid_columnconfigure(0, weight = 1)
         
         # Create frame in canvas
-        self.frame = tk.Frame(self.canvas, borderwidth = 0, bd = 0)
+        self.frame = tk.Frame(self.canvas, borderwidth = 0, highlightthickness = 0, bd = 0)
         self.frame.columnconfigure(0, weight = 1)
         self.frame.columnconfigure(1, weight = 1)
         
@@ -686,9 +845,6 @@ class ScrollableFrame(tk.Frame):
         _root = self.frame
         return self.frame
     
-    def onMouseWheel(self, event):
-        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
     def __exit__(self, type, value, traceback):
         global _root, _pack_side
         
@@ -713,7 +869,7 @@ class ScrollableFrame(tk.Frame):
 class Separator(tk.Canvas):
     def __init__(self, width, height, horizontalSpacing, verticalSpacing, color = (100, 100, 100), **kw):
         self.kw = kw
-        tk.Canvas.__init__(self, _root, width = width + horizontalSpacing * 2, height = height + verticalSpacing * 2, **self.kw)
+        tk.Canvas.__init__(self, _root, width = width + horizontalSpacing * 2, height = height + verticalSpacing * 2, highlightthickness = 0, **self.kw)
         self.color = color
         
         if width != 0 and height != 0:
@@ -899,6 +1055,9 @@ class Button(tk.Canvas):
                     self.command()
     
     def disable(self):
+        if self.mouseOver:
+            self.hoverExit(None)
+        
         self.enabled = False
         
         self.config(state = tk.DISABLED)
@@ -929,7 +1088,6 @@ class Button(tk.Canvas):
         self.itemconfig(self.label, text = self.labelText)
 
 class Label(tk.Label):
-    
     '''
     A text label.
 
@@ -937,24 +1095,25 @@ class Label(tk.Label):
         text: The label's text
         color: Color of the text
         font: Font of the text
-        All other options in tkinter.Label:
-        height, state, width,
+        **kw: All other options in tkinter.Label (height, state, width,
         activebackground, activeforeground, anchor,
         background, bitmap, borderwidth, cursor,
         disabledforeground, font, foreground,
         highlightbackground, highlightcolor,
         highlightthickness, image, justify,
         padx, pady, relief, takefocus, text,
-        textvariable, underline, wraplength
+        textvariable, underline, wraplength)
     '''
-    def __init__(self, text = "", color = "black", font = "Arial 10", **kw):
+    def __init__(self, text, color = "black", font = "Arial 10", **kw):
         self.kw   = kw
-        self.textvariable = tk.StringVar()
-        self.textvariable.set(self.kw['text'] if 'text' in self.kw else text)
-        if 'text' in self.kw:
-            del self.kw['text']
-        tk.Label.__init__(self, _root, textvariable = self.textvariable, foreground = color, font = font, **kw)
-        self.pack( side = _pack_side )
+        if type(text) == str:
+            self.textvariable = tk.StringVar()
+            self.textvariable.set(text)
+        elif type(text) == tk.StringVar:
+            self.textvariable = text
+        
+        tk.Label.__init__(self, _root, textvariable = self.textvariable, highlightthickness = 0, foreground = color, font = font, **kw)
+        self.pack(side = _pack_side)
         
     @property
     def text(self):
@@ -964,14 +1123,14 @@ class Label(tk.Label):
     def text(self, text):
         self.textvariable.set(text)
 
-class Message(tk.Message):
+class Message(tk.Message): # ??? I forget what this does...
     def __init__(self, text = "", **kw):
         self.kw = kw
         self.textvariable = tk.StringVar()
         self.textvariable.set(self.kw['text'] if 'text' in self.kw else text)
         if 'text' in self.kw:
             del self.kw['text']
-        tk.Message.__init__(self, _root, textvariable = self.textvariable, anchor = NW, **kw)
+        tk.Message.__init__(self, _root, textvariable = self.textvariable, highlightthickness = 0, anchor = NW, **kw)
         self.pack( side = _pack_side )
         
     @property
@@ -1017,8 +1176,9 @@ class loop(threading.Thread):
 
 class TextBox(tk.Frame):
     hoverEffect = ("grow/darken", (4, 4, (20, 20, 20)))
-    enabled = False
+    enabled = True
     validInput = True
+    mouseOver = False
     
     '''
     A text box where the user can type things into.
@@ -1036,30 +1196,31 @@ class TextBox(tk.Frame):
         color: Color of the text box
         textColor: Color of the text
     '''
-    def __init__(self, width, height, text = "", command = None, commandArgs = None, executeOnType = True, padding = 2, cornerRadius = 10, inputType = 'text', color = (200, 200, 200), textColor = (0, 0, 0), invalidTextColor = (255, 20, 20), **kwargs):
+    def __init__(self, width, height, text = "", command = None, commandArgs = None, executeOnType = True, padding = 5, cornerRadius = 10, inputType = 'text', color = (200, 200, 200), textColor = (0, 0, 0), invalidTextColor = (255, 20, 20), **kwargs):
         self.textvariable = tk.StringVar()
         self.textvariable.set(text)
         
         self.width = width
         self.height = height
-        self.validateCommand = command
+        self.command = command
         self.commandArgs = commandArgs
         self.executeOnType = executeOnType
-        self.type = inputType
+        self.inputType = inputType
         self.color = color
         self.textColor = textColor
         self.invalidTextColor = invalidTextColor
         
-        tk.Frame.__init__(self, _root, width = width, height = height)
+        tk.Frame.__init__(self, _root, width = width, height = height, highlightthickness = 0)
 
-        self.canvas = tk.Canvas(self, width = width, height = height)
+        self.canvas = tk.Canvas(self, width = width, height = height, highlightthickness = 0)
         self.canvas.place(rely = 0, relx = 0)
         
-        self.entry = tk.Entry(self, width = width, textvariable = self.textvariable, bg = colorRGB(*self.color), fg = colorRGB(*self.textColor), relief = "flat", **kwargs)
+        # Create actual entry object
+        self.entry = tk.Entry(self, width = width, textvariable = self.textvariable, highlightthickness = 0, bg = colorRGB(*self.color), fg = colorRGB(*self.textColor), relief = "flat", **kwargs)
         self.entry.place(relx = cornerRadius / width, rely = padding / height, relwidth = 1 - ((cornerRadius * 2) / width), relheight = 1 - ((padding * 2) / height))
 
         # Create background rounded rectangle
-        self.rect = RoundedRectangle(padding, padding, width - padding * 2, height - padding * 2, cornerRadius, color = colorRGB(*self.color), canvas = self.canvas)
+        self.rect = RoundedRectangle(padding, padding, width - (padding * 2), height - (padding * 2), cornerRadius, color = colorRGB(*self.color), canvas = self.canvas)
         self.rect.draw()
     
         # Bind actions
@@ -1071,22 +1232,24 @@ class TextBox(tk.Frame):
     
         self.pack(side = _pack_side)
     
-    '''
-    Set the widget's hover effect
-    
-    Options:
-        "grow (x, y)": The widget will grow when hovered over (default).
-        "darken (r, g, b)": The widget will darken when hovered over.
-        "grow/darken (x, y, (r, g, b))": The widget will grow and darken when hovered over.
-        "color (r, g, b)": The widget will change color when hovered over.
-        "none": The widget will not have a hover effect
-    '''
     def setHoverEffect(self, hoverEffect):
+        '''
+        Set the widget's hover effect
+        
+        Options:
+            "grow (x, y)": The widget will grow when hovered over (default).
+            "darken (r, g, b)": The widget will darken when hovered over.
+            "grow/darken (x, y, (r, g, b))": The widget will grow and darken when hovered over.
+            "color (r, g, b)": The widget will change color when hovered over.
+            "none": The widget will not have a hover effect
+        '''
         self.hoverEffect = hoverEffect
     
     def hoverEnter(self, event):
         if not self.enabled:
             return
+        
+        self.mouseOver = True
         
         if self.hoverEffect[0] == "grow":
             # Grow the rect
@@ -1094,22 +1257,26 @@ class TextBox(tk.Frame):
         elif self.hoverEffect[0] == "darken":
             # Darken the rect
             self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][0], self.color[1] - self.hoverEffect[1][1], self.color[2] - self.hoverEffect[1][2])
+            self.entry.config(bg = self.rect.color)
         elif self.hoverEffect[0] == "grow/darken":
             # Grow and darken the rect
             self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
             self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][2][0], self.color[1] - self.hoverEffect[1][2][1], self.color[2] - self.hoverEffect[1][2][2])
+            self.entry.config(bg = self.rect.color)
         elif self.hoverEffect[0] == "color":
             # Change the rect color
             self.rect.color = colorRGB(*self.hoverEffect[1])
+            self.entry.config(bg = self.rect.color)
         elif self.hoverEffect[0] == "none":
             pass
         
         self.rect.draw()
-        self.lift(self.text)
         
     def hoverExit(self, event):
         if not self.enabled:
             return
+        
+        self.mouseOver = True
         
         if self.hoverEffect[0] == "grow":
             # Shrink the rect
@@ -1117,24 +1284,29 @@ class TextBox(tk.Frame):
         elif self.hoverEffect[0] == "darken":
             # Return the rect color to normal
             self.rect.color = colorRGB(*self.color)
+            self.entry.config(bg = self.rect.color)
         elif self.hoverEffect[0] == "grow/darken":
             # Return the rect size and color to normal
             self.rect.grow(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
             self.rect.color = colorRGB(*self.color)
+            self.entry.config(bg = self.rect.color)
         elif self.hoverEffect[0] == "color":
             # Return the rect color to normal
             self.rect.color = colorRGB(*self.color)
+            self.entry.config(bg = self.rect.color)
         elif self.hoverEffect[0] == "none":
             pass
         
         self.rect.draw()
-        self.lift(self.text)
     
     def disable(self):
+        if self.mouseOver:
+            self.hoverExit(None)
+            
         self.enabled = False
         
         self.config(state = tk.DISABLED)
-        
+            
         # Lighten the text color and darken the background color
         self.itemconfig(self.text, fill = colorRGB(min(255, self.textColor[0] + 100), min(255, self.textColor[1] + 100), min(255, self.textColor[2] + 100)))
         self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
@@ -1147,24 +1319,26 @@ class TextBox(tk.Frame):
         # Return the text color and the background color to normal
         self.rect.color = colorRGB(*self.color)
     
+    # Validate each character that gets typed
     def validateChar(self, newText):
-        """ Validates each character that gets typed"""
+        if not self.enabled:
+            return False
         
-        if self.type == 'text':
+        if self.inputType == 'text':
             # Set text color to black
             self.entry.config(foreground = colorRGB(*self.textColor))
             self.validInput = True
             
             if self.executeOnType:
                 self.submit(None, newText)
-        elif self.type == 'int' and isInt(newText):
+        elif self.inputType == 'int' and isInt(newText):
             # Set text color to black
             self.entry.config(foreground = colorRGB(*self.textColor))
             self.validInput = True
             
             if self.executeOnType:
                 self.submit(None, newText)
-        elif self.type == 'decimal' and isFloat(newText):
+        elif self.inputType == 'decimal' and isFloat(newText):
             # Set text color to black
             self.entry.config(foreground = colorRGB(*self.textColor))
             self.validInput = True
@@ -1179,24 +1353,28 @@ class TextBox(tk.Frame):
         return True
     
     def submit(self, value, newText = None):
-        if self.validInput and self.validateCommand:
-            if self.commandArgs:
+        if not self.enabled:
+            return False
+        
+        # Execute callback function with its arguments and the inputted text
+        if self.validInput and self.command != None:
+            if self.commandArgs != None and len(self.commandArgs) != 0:
                 if newText:
-                    self.validateCommand(newText, *self.commandArgs)
+                    self.command(newText, *self.commandArgs)
                 else:
-                    self.validateCommand(self.text, *self.commandArgs)
+                    self.command(self.text, *self.commandArgs)
             else:
                 if newText:
-                    self.validateCommand(newText)
+                    self.command(newText)
                 else:
-                    self.validateCommand(self.text)
+                    self.command(self.text)
 
             # Unfocus this entry if this wasn't called by typing
             if not newText:
                 _root.focus()
     
     def setInputCallback(self, callback, *args):
-        self.validateCommand = callback
+        self.command = callback
         self.commandArgs = args
     
     @property
@@ -1277,7 +1455,7 @@ def askString(title, prompt, **kw):
 class ScrollableText(scrolledtext.ScrolledText):
     def __init__(self, text = "", bg = 'white', height = 10, expand = True, editable = True, **kw):
         global _root, _pack_side
-        scrolledtext.ScrolledText.__init__(self, _root, bg = bg, height = height, **kw)
+        scrolledtext.ScrolledText.__init__(self, _root, bg = bg, height = height, highlightthickness = 0, **kw)
         self.insert(tk.END, text)
         if not editable:
             self.config(state = DISABLED)
@@ -1295,39 +1473,72 @@ class ScrollableText(scrolledtext.ScrolledText):
             self.config(state = DISABLED)
 
 class CheckBox(tk.Checkbutton):
-    def __init__(self, text = "", checked = False, *args, **kwargs):
+    '''
+    A tickable CheckBox
+    '''
+    
+    _checked = False
+    
+    def __init__(self, text = "", checked = False, command = None, commandArgs = None, *args, **kwargs):
         self.textvariable = tk.StringVar()
         self.textvariable.set(text)
-        self._checked = tk.BooleanVar()
-        self._checked.set(checked)
-        tk.Checkbutton.__init__(self, _root, textvariable = self.textvariable, variable = self._checked, relief = "flat", **kwargs)
+        
+        self._checked = checked
+        self.tickedCommand = command
+        self.commandArgs = commandArgs
+        
+        tk.Checkbutton.__init__(self, _root, command = self._changed, textvariable = self.textvariable, highlightthickness = 0, relief = "flat", **kwargs)
         self.pack(side = _pack_side)
+        
+        if checked:
+            self.select()
+    
+    # Callback
+    def _changed(self):
+        self._checked = not self._checked
+        
+        if self.tickedCommand:
+            if self.commandArgs:
+                self.tickedCommand(self._checked, *self.commandArgs)
+            else:
+                self.tickedCommand(self._checked)
     
     def toggleCheck(self):
-        '''Toggle this checkbox'''
-        self.toggle()
+        '''Toggle this CheckBox'''
+        self._checked = not self._checked
+        self.select() if self._checked else self.deselect()
     
     def uncheck(self):
-        '''Uncheck this checkbox'''
+        '''Uncheck this CheckBox'''
+        self._checked = False
         self.deselect()
     
     def check(self):
-        '''Check this checkbox'''
+        '''Check this CheckBox'''
+        self._checked = True
         self.select()
     
     def setChecked(self, newState: bool):
-        '''Set this checkbox's checked state'''
+        '''Set this CheckBox's checked state'''
+        self._checked = newState
+        
         if newState:
             self.check()
         else:
             self.uncheck()
     
     def getChecked(self):
-        return self._checked.get()
-        
-    def __call__(self, func):
-        self.config(command = lambda: func(self.checked))
-        return func
+        return self._checked
+    
+    def setTickedCallback(self, callback, *args):
+        self.tickedCommand = callback
+        self.commandArgs = args
+    
+    def disable(self):
+        self.config(state = DISABLED)
+    
+    def enable(self):
+        self.config(state = NORMAL)
     
     @property
     def text(self):
@@ -1336,14 +1547,6 @@ class CheckBox(tk.Checkbutton):
     @text.setter
     def text(self, text):
         self.textvariable.set(text)
-        
-    @property
-    def checked(self):
-        return self._checked.get()
-    
-    @checked.setter
-    def checked(self, text):
-        self._checked.set(text)
 
 class RadioButton(tk.Radiobutton):
     def __init__(self, value, text = "", variable = None, checked = False, *args, **kwargs):
@@ -1353,7 +1556,7 @@ class RadioButton(tk.Radiobutton):
         if variable is None:
             variable = _radioVariable
         self.variable = variable
-        tk.Radiobutton.__init__(self, _root, textvariable = self.textvariable, variable = self.variable, value = value, relief = "flat", **kwargs)
+        tk.Radiobutton.__init__(self, _root, textvariable = self.textvariable, highlightthickness = 0, variable = self.variable, value = value, relief = "flat", **kwargs)
         self.pack(side = _pack_side)
     
     def deselect(self):
@@ -1394,7 +1597,7 @@ class RadioButtonGroup(object):
 
 class Spinner(tk.Spinbox):
     def __init__(self, **kw):
-        tk.Spinbox.__init__(self, _root, relief = "flat", **kw)
+        tk.Spinbox.__init__(self, _root, highlightthickness = 0, relief = "flat", **kw)
         self.pack(side = _pack_side)
         
     def __call__(self, func):
@@ -1411,7 +1614,7 @@ class Spinner(tk.Spinbox):
         
 class ScaleBar(tk.Scale):
     def __init__(self, range = None, enabled = True, **kw):
-        tk.Scale.__init__(self, _root, relief = "flat", **kw)
+        tk.Scale.__init__(self, _root, highlightthickness = 0, relief = "flat", **kw)
         self.pack(side = _pack_side)
         self._enabled = enabled
         
@@ -1470,7 +1673,7 @@ class ListBox(tk.Listbox):
         values = kw['values']
         if 'values' in kw:
             del kw['values']
-        tk.Listbox.__init__(self, _root, relief = "flat", **kw)
+        tk.Listbox.__init__(self, _root, highlightthickness = 0, relief = "flat", **kw)
         self.pack(side = _pack_side)
         for item in values:
             self.insert(tk.END, item)
@@ -1756,19 +1959,20 @@ class Graph(tk.Frame):
     NOTE: This must me created INSIDE of a frame, like so:
     with Stack():
         graph = tk_tools.Graph(
-            xMin=-1.0,
-            xMax=1.0,
-            yMin=0.0,
-            yMax=2.0,
-            xTicks=0.2,
-            yTicks=0.2,
-            width=500,
-            height=400
+            xMin = -1.0,
+            xMax = 1.0,
+            yMin = 0.0,
+            yMax = 2.0,
+            xTicks = 0.2,
+            yTicks = 0.2,
+            width = 500,
+            height = 400
         )
-        graph.grid(row=0, column=0)
-        # create an initial line
-        line_0 = [(x/10, x/10) for x in range(10)]
-        graph.plot_line(line_0)
+        
+        graph.grid(row = 0, column = 0)
+
+        lineToPlot = [(x / 10, x / 10) for x in range(10)]
+        graph.plot_line(lineToPlot)
         
     :param xMin: the x minimum
     :param xMax: the x maximum
@@ -1783,7 +1987,7 @@ class Graph(tk.Frame):
         self._parent = _root
         super().__init__(self._parent, **args)
 
-        self.canvas = tk.Canvas(self)
+        self.canvas = tk.Canvas(self, highlightthickness = 0)
         self.canvas.grid(row=0, column=0)
 
         self.w = float(self.canvas.config("width")[4])
@@ -1950,10 +2154,11 @@ class Slider(tk.Canvas):
     You can change the step, min and max value, and label suffix
     '''
     
-    disabled = False
+    enabled = True
     mouseOver = False
+    dragging = False
     
-    def __init__(self, start, end, value, width, height, step = 0, suffix = "", padding = [20, 10], cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = "Arial 8 bold", labelColor = (255, 255, 255), **args):
+    def __init__(self, start, end, value, width, height, step = 0, command = None, labelText = "", suffix = "", padding = [20, 10], cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), thumbColor = (200, 200, 255), labelFont = "Arial 8 bold", labelColor = (255, 255, 255), labelWidth = 100, **args):
         tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **args)
         self.start = start
         self.end = end
@@ -1969,66 +2174,102 @@ class Slider(tk.Canvas):
         self.labelFont = labelFont
         self.cornerRadius = cornerRadius
         self.thumbRadius = cornerRadius / 2
+        self.thumbColor = thumbColor
         
+        self.labelWidth = 0 if labelText == "" else labelWidth + 10
+        actualLabelWidth = self.labelWidth - 10
+                
+        # Create the label
+        self.label = Text(padding[0] + actualLabelWidth / 2, self.height / 2, width = self.labelWidth, height = self.height - (padding[1] * 2), justify = 'right', text = labelText, font = "Arial 12", canvas = self)
+        self.label.draw()
+                
         # Local pixel minimum and maximum
-        self.min = self.padding[0]
+        self.min = self.padding[0] + self.labelWidth
         self.max = self.width - self.padding[0]
         
         # Create background rect
         bgPaddingX = self.padding[0] * 0.8
         bgPaddingY = self.padding[1] * 0.7
-        self.background = RoundedRectangle(x = bgPaddingX, y = bgPaddingY, width = self.width - bgPaddingX * 2, height = self.height - bgPaddingY * 2, radius = self.cornerRadius, color = colorRGB(*self.backgroundColor), canvas = self)
+        self.background = RoundedRectangle(x = bgPaddingX + self.labelWidth, y = bgPaddingY, width = self.width - bgPaddingX * 2 - self.labelWidth, height = self.height - bgPaddingY * 2, radius = self.cornerRadius, color = colorRGB(*self.backgroundColor), canvas = self)
         self.background.draw()
         
         # Create slider track
-        self.track = RoundedRectangle(x = self.min, y = self.padding[1], width = self.convertToPixel(self.value) - self.thumbRadius, height = self.height - self.padding[1] * 2, radius = self.cornerRadius * (2 / 3), color = colorRGB(*self.color), canvas = self)
+        self.track = RoundedRectangle(x = self.min, y = self.padding[1], width = self.convertToPixel(self.value) - self.thumbRadius - self.labelWidth, height = self.height - self.padding[1] * 2, radius = self.cornerRadius * (2 / 3), color = colorRGB(*self.color), canvas = self)
         
-        if self.value != 0:
+        if self.value != self.start:
             self.track.draw()
         
         # Create the thumb
-        self.thumb = Ellipse(x = self.convertToPixel(self.value) - self.thumbRadius, y = (self.height / 2) - self.thumbRadius, width = self.thumbRadius * 2, height = self.thumbRadius * 2, color = colorRGB(*self.color), canvas = self)
+        self.thumb = RoundedRectangle(x = self.convertToPixel(self.value), y = (self.height / 2) - ((self.height - self.thumbRadius) / 2), width = self.thumbRadius, height = self.height - self.thumbRadius, radius = self.thumbRadius, color = self.thumbColor, canvas = self)
         self.thumb.draw()
         
         # Create the text label
-        self.text = self.create_text(self.width / 2, self.height / 2, text = str(round(self.value, 1)) + self.suffix)
-        self.itemconfig(self.text, font = self.labelFont, fill = colorRGB(*self.labelColor))
-                
+        self.text = Text(self.labelWidth + self.padding[0] + ((self.width - self.padding[0] * 2 - self.labelWidth) / 2), self.height / 2, width = 50, height = self.height, font = self.labelFont, text = str(round(self.value, 1)) + self.suffix, color = 'white', canvas = self)
+        self.text.draw()
+        
+        # Make sure the thumb and label are on top
+        self._raiseElements()
+        
         self.pack(side = _pack_side)
         
         self.dragFunc = None
         
+        if command != None:
+            self.setInputCallback(command)
+        
         # Bind inputs
         self.bind("<B1-Motion>", self.dragClick)
+        self.bind("<ButtonPress-1>", self.onClickDown)
         self.bind("<ButtonRelease-1>", self.onClickUp)
         self.bind('<Enter>', self.hoverEnter)
         self.bind('<Leave>', self.hoverExit)
+        self.bind("<MouseWheel>", self.onMouseWheel)
+    
+    def onMouseWheel(self, event):
+        if not self.enabled:
+            return
+        
+        self.setValue(clamp(self.value + event.delta, self.start, self.end))
 
     def hoverEnter(self, event):
         self.mouseOver = True
         
-        if self.disabled:
+        if self.dragging or not self.enabled:
             return
         
-        # Darken the rect and thumb
-        self.track.color = colorRGB(self.color[0] - 25, self.color[1] - 25, self.color[2] - 25)
-        self.track.draw()
-        self.thumb.color = colorRGB(self.color[0] - 25, self.color[1] - 25, self.color[2] - 25)
+        # Grow the thumb
+        self.thumb.resize(self.thumbRadius + 5, self.height - self.thumbRadius + 5)
+        self.thumb.move(-2.5, -2.5)
         self.thumb.draw()
-            
+        
+        # Make sure the thumb and label are on top
+        self._raiseElements()
+        
     def hoverExit(self, event):
         self.mouseOver = False
         
-        if self.disabled:
+        if self.dragging or not self.enabled:
             return
         
-        # Return the rect and thumb color to normal
-        self.track.color = colorRGB(*self.color)
-        self.track.draw()
-        self.thumb.color = colorRGB(*self.color)
+        # Return the thumb back to its normal size
+        self.thumb.resize(self.thumbRadius, self.height - self.thumbRadius)
+        self.thumb.move(2.5, 2.5)
+        # self.thumb.setPos(self.convertToPixel(self.value) - self.thumbRadius, (self.height / 2) - ((self.height - self.thumbRadius) / 2))
         self.thumb.draw()
+        
+        # Make sure the thumb and label are on top
+        self._raiseElements()
 
-    def onClickUp(self, event):
+    def dragClick(self, event):
+        if not self.enabled:
+            return
+        
+        self.dragging = True
+        
+        # Darken the track
+        self.track.color = colorRGB(self.color[0] - 25, self.color[1] - 25, self.color[2] - 25)
+        self.track.draw()
+        
         # Set the value
         self.setValue(self.convertToLocal(event.x))
         
@@ -2036,9 +2277,13 @@ class Slider(tk.Canvas):
         if self.dragFunc != None:
             self.dragFunc(event)
     
-    def dragClick(self, event):
-        if self.disabled:
+    def onClickDown(self, event):
+        if not self.enabled:
             return
+        
+        # Darken the track
+        self.track.color = colorRGB(self.color[0] - 25, self.color[1] - 25, self.color[2] - 25)
+        self.track.draw()
         
         # Set the value
         self.setValue(self.convertToLocal(event.x))
@@ -2046,6 +2291,47 @@ class Slider(tk.Canvas):
         # Call change function
         if self.dragFunc != None:
             self.dragFunc(event)
+    
+    def onClickUp(self, event):
+        if not self.enabled:
+            return
+        
+        self.dragging = False
+        
+        # Return the track back to its normal color
+        self.track.color = colorRGB(*self.color)
+        self.track.draw()
+        
+        # Make sure the thumb and label are on top
+        self._raiseElements()
+    
+    # Set the value of the slider
+    def setValue(self, newValue):
+        self.value = newValue
+        self.valuePix = self.convertToPixel(self.value)
+        
+        # Resize slider bar
+        # If the value is 0 then hide the track
+        if self.value == self.start:
+            self.track.resize(self.valuePix - self.labelWidth - (self.thumbRadius * 2), self.height - self.padding[1] * 2)
+            self.track.undraw()
+        else:
+            self.track.resize(self.valuePix - self.labelWidth - (self.thumbRadius * 2), self.height - self.padding[1] * 2)
+            self.track.draw()
+        
+        # Set text
+        self.text.setText(str(round(self.getValue(), 1)) + self.suffix)
+        self.text.draw()
+        
+        # Set thumb position
+        self.thumb.setPos(self.valuePix - self.thumbRadius + 2.5, (self.height / 2) - ((self.height - self.thumbRadius) / 2) - 2.5)
+        self.thumb.draw()
+        
+        # Make sure the thumb and label are on top
+        self._raiseElements()
+    
+    def getValue(self):
+        return int(self.value) if isInt(self.step) else self.value
     
     # Convert a pixel coordinate into this slider's range and using the step value (clamped)
     def convertToLocal(self, x):
@@ -2058,29 +2344,10 @@ class Slider(tk.Canvas):
     def convertToPixel(self, value):
         return remap(value, self.start, self.end, self.min, self.max)
     
-    def setValue(self, newValue):
-        self.value = newValue
-        self.valuePix = self.convertToPixel(self.value)
-        
-        # Resize slider bar
-        # If the value is 0 then hide the track
-        if self.value == 0:
-            self.track.undraw()
-        else:
-            self.track.resize(self.valuePix - self.thumbRadius, self.height - self.padding[1] * 2)
-            self.track.draw()
-        
-        # Set text
-        self.itemconfig(self.text, text = str(round(self.value, 1)) + self.suffix)
-        
-        # Set thumb position
-        self.thumb.setPos(self.convertToPixel(self.value) - self.thumbRadius, (self.height / 2) - self.thumbRadius)
-        
-        # Keep the text on top
-        self.tag_raise(self.text)
-    
-    def getValue(self):
-        return self.value
+    # Move the thumb and label to the top
+    def _raiseElements(self):
+        self.tag_raise(self.thumb.id)
+        self.tag_raise(self.text.id)
     
     def setInputCallback(self, func):
         '''
@@ -2092,7 +2359,7 @@ class Slider(tk.Canvas):
         self.dragFunc = func
     
     def enable(self):
-        self.disabled = False
+        self.enabled = True
         
         # Make the slider color
         self.track.setColor(colorRGB(*self.color))
@@ -2101,7 +2368,10 @@ class Slider(tk.Canvas):
         self.thumb.draw()
     
     def disable(self):
-        self.disabled = True
+        if self.mouseOver:
+            self.hoverExit(None)
+            
+        self.enabled = False
         
         # Make the slider gray
         self.track.setColor(colorRGB(150, 150, 150))
@@ -2109,27 +2379,26 @@ class Slider(tk.Canvas):
         # Hide the thumb
         self.thumb.undraw()
 
-class SliderWithTextInput(Flow):    
-    def __init__(self, start, end, value, width, height, step = 0, command = "", labelText = "", suffix = "", padding = [20, 10], cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = "Arial 8 bold", labelColor = (255, 255, 255),**kwargs):
+class SliderWithTextInput(Flow):
+    '''
+        A slider with a text input.
+    '''
+    def __init__(self, start, end, value, width, height, step = 0, command = None, entryWidth = 70, labelText = "", suffix = "", padding = [20, 10], cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), thumbColor = (200, 200, 255), labelFont = "Arial 8 bold", labelColor = (255, 255, 255), labelWidth = 100, **kwargs):
         super().__init__()
         
         self.command = command
         
+        inputType = "int" if isInt(step) else "decimal"
+        
         with self:
-            # Create a label
-            self.label = Label(labelText)
-            
             # Create the slider
-            self.slider = Slider(start, end, value, width - 100, height, step, suffix, padding, cornerRadius, color, backgroundColor, labelFont, labelColor, **kwargs)
+            self.slider = Slider(start, end, value, width - entryWidth, height, step, command = self.onSliderInput, labelText = labelText, suffix = suffix, padding = padding, cornerRadius = cornerRadius, color = color, backgroundColor = backgroundColor, thumbColor = thumbColor, labelFont = labelFont, labelColor = labelColor, labelWidth = labelWidth, **kwargs)
             
             # Create the text input
-            self.textInput = TextBox(100, height, str(value), command = self.onTextInput, font = labelFont)
+            self.textInput = TextBox(entryWidth, height, str(value), command = self.onTextInput, padding = 6, inputType = inputType)
 
         # Set the text input value
         self.textInput.text = str(value)
-        
-        # Set the slider callback
-        self.slider.setInputCallback(self.onSliderInput)
     
     def getValue(self):
         return self.slider.getValue()
@@ -2228,7 +2497,7 @@ class Popup:
         x = int(self.widget.winfo_rootx()) + self.xOffset
         y = int(self.widget.winfo_rooty()) + self.yOffset
 
-        self.popupWindow = win = tk.Toplevel(self.widget, bg = 'white', borderwidth = 1, relief = tk.SOLID)
+        self.popupWindow = win = tk.Toplevel(self.widget, bg = 'white', borderwidth = 1, highlightthickness = 0, relief = tk.SOLID)
 
         # Hide the border on the top level window
         win.wm_overrideredirect(True)
@@ -2270,11 +2539,58 @@ class Popup:
     def registerCloseCommand(self, command):
         self.closeCommand = command
 
-#region Shape graphics stuff
-class GraphicsObject:
-    isDrawn = False
+def openColorChooser(initialColor = None):
+    """
+    Open a color chooser window
     
-    def __init__(self, x, y, color, outline, canvas = None):
+    Args:
+        initialColor: The initial color to set the color chooser to
+        
+    Returns:
+        The color selected by the user
+    """
+    if initialColor == None:
+        initialColor = "#000000"
+    
+    return colorchooser.askcolor(initialColor)[1]
+
+class ColorWidget(Flow):
+    '''
+    A widget that displays a color and allows the user to change it
+    '''
+    def __init__(self, name, color, width = 100, height = 50):
+        super().__init__(width = width, height = height)
+        
+        self.name = name
+        self.color = color
+        
+        self.editButton = Button("🖋️", 50, 50, color = color, textFont = "Arial 15", command = self.editColor) #, command = self.editColor, color = colorRGB(*self.color)) # 🖋️
+        self.label = Label(self.name, width = 5, bg = 'red')
+    
+    def editColor(self, event):
+        self.color = openColorChooser(self.color)
+        self.editButton.setColor(self.color) 
+
+#region Shape graphics stuff
+# Abstract Base
+class GraphicsObject:
+    '''
+    A graphics object that can be drawn on a canvas
+    You can use this class to create your own graphics objects, simply inherit it and implement the draw() method
+    
+    Args:
+        x: The x coordinate of the object
+        y: The y coordinate of the object
+        color: The color of the object
+        outline: The outline color of the object
+        shouldPanZoom(bool): Whether or not the object should be affected to zooming and panning on the canvas
+        canvas(tk.Canvas): The canvas to draw the object on
+    '''
+    
+    isDrawn = False
+    shouldPanZoom = False
+
+    def __init__(self, x, y, color, outline, shouldPanZoom = False, canvas = None):
         global _canvas
         # if type(canvas) == DEGraphWin or type(canvas) == Window:
         #     # Throw exception
@@ -2298,6 +2614,7 @@ class GraphicsObject:
         
         self.x = x
         self.y = y
+        self.shouldPanZoom = shouldPanZoom
         
         if type(color) == str:
             self.color = color
@@ -2316,19 +2633,36 @@ class GraphicsObject:
     def draw(self):
         self.canvas.delete(self.id)
         self.isDrawn = False
-        self._draw()
+        
+        # TODO: This is duct tape because I couldn't be bothered to fix the problem fully (some canvasses that these objects can be drawn on don't implement addDrawn or removeDrawn). Actually fix this!
+        if self.shouldPanZoom:
+            try:
+                drawX = self.x * self.canvas.zoom + self.canvas.offset[0] + self.canvas.dragOffset[0]
+                drawY = self.y * self.canvas.zoom + self.canvas.offset[1] + self.canvas.dragOffset[1]
+                self._draw(drawX, drawY, self.canvas.zoom)
+            except:
+                self._draw(self.x, self.y, 1)
+        else:
+            self._draw(self.x, self.y, 1)
+            
+        try:
+            self.canvas.addDrawn(self)
+        except:
+            pass
+        
         self.isDrawn = True
     
-    def _draw(self):
+    def _draw(self, drawX, drawY, drawScale):
         pass
 
-    '''
-    Not necessary since the draw function undraws it automatically, but I'm keeping this method here just in case
-    '''
     def undraw(self):
-        if self.isDrawn:
-            self.canvas.delete(self.id)
-            self.isDrawn = False
+        # TODO: This is duct tape because I couldn't be bothered to fix the problem fully (some canvasses that these objects can be drawn on don't implement addDrawn or removeDrawn). Actually fix this!
+        try:
+            if self.isDrawn:
+                self.canvas.removeDrawn(self.id)
+                self.isDrawn = False
+        except:
+            pass
     
     def setPos(self, x, y):
         self.move(x - self.x, y - self.y)
@@ -2346,24 +2680,24 @@ class GraphicsObject:
 
 # Rectangle
 class Rectangle(GraphicsObject):
-    def __init__(self, x, y, width, height, color, outline, canvas = None):
-        super().__init__(x, y, color, outline, canvas)
+    def __init__(self, x, y, width, height, color, outline, shouldPanZoom = False, canvas = None):
+        super().__init__(x, y, color, outline, shouldPanZoom, canvas)
         self.width = width
         self.height = height
 
-    def _draw(self):
-        self.id = self.canvas.create_rectangle(self.x, self.y, self.x + self.width, self.y + self.height, outline = self.outline, fill = self.color)
+    def _draw(self, drawX, drawY, drawScale):
+        self.id = self.canvas.create_rectangle(drawX, drawY, drawX + self.width * drawScale, drawY + self.height * drawScale, outline = self.outline, fill = self.color)
 
 # Ellipse
 class Ellipse(GraphicsObject):
-    def __init__(self, x, y, width, height, color, outlineWidth = 0, outline = None, canvas = None):
-        super().__init__(x, y, color, outline, canvas)
+    def __init__(self, x, y, width, height, color, outlineWidth = 0, outline = None, shouldPanZoom = False, canvas = None):
+        super().__init__(x, y, color, outline, shouldPanZoom, canvas)
         self.width = width
         self.height = height
         self.outlineWidth = outlineWidth
 
-    def _draw(self):
-        self.id = self.canvas.create_oval(self.x, self.y, self.x + self.width, self.y + self.height, width = self.outlineWidth, outline = self.outline, fill = self.color)
+    def _draw(self, drawX, drawY, drawScale):
+        self.id = self.canvas.create_oval(drawX, drawY, drawX + self.width * drawScale, drawY + self.height * drawScale, width = self.outlineWidth, outline = self.outline, fill = self.color)
 
     def shrink(self, x, y):
         self.width += x
@@ -2387,13 +2721,13 @@ class Ellipse(GraphicsObject):
 
 # Line
 class Line(GraphicsObject):
-    def __init__(self, x1, y1, x2, y2, color, outline = None, canvas = None):
-        super().__init__(x1, y1, color, outline, canvas)
+    def __init__(self, x1, y1, x2, y2, color, outline = None, shouldPanZoom = False, canvas = None):
+        super().__init__(x1, y1, color, outline, shouldPanZoom, canvas)
         self.x2 = x2
         self.y2 = y2
 
-    def _draw(self):
-        self.id = self.canvas.create_line(self.x, self.y, self.x2, self.y2, outline = self.outline, fill = self.color)
+    def _draw(self, drawX, drawY, drawScale):
+        self.id = self.canvas.create_line(drawX, drawY, self.x2 * drawScale + drawX, self.y2 * drawScale + drawY, fill = self.color, width = self.outline)
 
     def getPoints(self):
         return self.x, self.y, self.x2, self.y2
@@ -2406,27 +2740,48 @@ class Line(GraphicsObject):
 
 # Text
 class Text(GraphicsObject):
-    def __init__(self, x, y, text, color, outline = None, canvas = None):
-        super().__init__(x, y, color, outline, canvas)
+    '''
+    A text object that can be drawn on a canvas
+    
+    Justify can be: left, center, right
+    '''
+    def __init__(self, x, y, width, height, text, color = 'black', justify = 'center', font = "Arial 10", outline = None, shouldPanZoom = False, canvas = None):
+        super().__init__(x, y, color, outline, shouldPanZoom, canvas)
+        self.width = width
+        self.height = height
         self.text = text
+        self.justify = justify
+        self.font = font
 
-    def _draw(self):
-        self.id = self.canvas.create_text(self.x, self.y, text = self.text, outline = self.outline, fill = self.color)
+    def _draw(self, drawX, drawY, drawScale):
+        self.id = self.canvas.create_text(drawX, drawY, width = self.width * drawScale, text = self.text, justify = self.justify, font = self.font, outline = self.outline, fill = self.color)
+        # self.id = self.canvas.create_text(self.x, self.y, width = self.width,text = self.text, justify = self.justify, font = self.font, outline = self.outline, fill = self.color)
 
-    def get_text(self):
+    def getText(self):
         return self.text
 
-    def set_text(self, text):
+    def setText(self, text):
         self.text = text
+
+    def setJustify(self, justify):
+        self.justify = justify
+
+    def setFont(self, font):
+        self.font = tkFont
 
 # Polygon
 class Polygon(GraphicsObject):
-    def __init__(self, points, color, outline = None, canvas = None):
-        super().__init__(0, 0, color, outline, canvas)
+    def __init__(self, points, color, outline = None, shouldPanZoom = False, canvas = None):
+        super().__init__(0, 0, color, outline, shouldPanZoom, canvas)
         self.points = points
 
-    def _draw(self):
-        self.id = self.canvas.create_polygon(self.points, outline = self.outline, fill = self.color)
+    def _draw(self, drawX, drawY, drawScale):
+        pts = []
+        for i in range(0, len(self.points)):
+            pts.append((self.points[i][0] * drawScale + drawX, self.points[i][1] * drawScale + drawY))
+        
+        self.id = self.canvas.create_polygon(pts, fill = self.color, outline = self.outline)
+        
 
     def getPoints(self):
         return self.points
@@ -2436,35 +2791,35 @@ class Polygon(GraphicsObject):
 
 # Image
 class GraphicsImage(GraphicsObject):
-    def __init__(self, x, y, image, canvas = None):
-        super().__init__(x, y, None, None, canvas)
+    def __init__(self, x, y, image, shouldPanZoom = False, canvas = None):
+        super().__init__(x, y, None, None, shouldPanZoom, canvas)
         self.image = image
 
-    def _draw(self):
-        self.id = self.canvas.create_image(self.x, self.y, image = self.image)
+    def _draw(self, drawX, drawY, drawScale):
+        self.id = self.canvas.create_image(drawX, drawY, image = self.image)
 
-    def get_image(self):
+    def getImage(self):
         return self.image
 
-    def set_image(self, image):
+    def setImage(self, image):
         self.image = image
 
 # Arc
 class Arc(GraphicsObject):
-    def __init__(self, x, y, width, height, start, extent, color, outline = None, canvas = None):
-        super().__init__(x, y, color, outline, canvas)
+    def __init__(self, x, y, width, height, start, extent, color, outline = None, shouldPanZoom = False, canvas = None):
+        super().__init__(x, y, color, outline, shouldPanZoom, canvas)
         self.width = width
         self.height = height
         self.start = start
         self.extent = extent
 
-    def _draw(self):
-        self.id = self.canvas.create_arc(self.x, self.y, self.x + self.width, self.y + self.height, start = self.start, extent = self.extent, outline = self.outline, fill = self.color)
+    def _draw(self, drawX, drawY, drawScale):
+        self.id = self.canvas.create_arc(drawX, drawY, drawX + self.width * drawScale, drawY + self.height * drawScale, start = self.start, extent = self.extent, outline = self.outline, fill = self.color)
 
-    def get_arc(self):
+    def getArc(self):
         return self.x, self.y, self.width, self.height, self.start, self.extent
 
-    def set_arc(self, x, y, width, height, start, extent):
+    def setArc(self, x, y, width, height, start, extent):
         self.x = x
         self.y = y
         self.width = width
@@ -2474,15 +2829,16 @@ class Arc(GraphicsObject):
 
 # Rounded rectangle
 class RoundedRectangle(GraphicsObject):
-    def __init__(self, x, y, width, height, radius, color, outline = None, canvas = None):
-        super().__init__(x, y, color, outline, canvas)
+    def __init__(self, x, y, width, height, radius, color, outline = None, shouldPanZoom = False, canvas = None):
+        super().__init__(x, y, color, outline, shouldPanZoom, canvas)
         self.width = width
         self.height = height
         self.radius = radius
 
-    def _draw(self):
-        self.id = roundedRect(self.canvas, self.x, self.y, self.x + self.width, self.y + self.height, self.radius, outline = self.outline, fill = self.color)
-    
+    def _draw(self, drawX, drawY, drawScale):
+        self.id = roundedRect(self.canvas, drawX, drawY, drawX + self.width * drawScale, drawY + self.height * drawScale, self.radius * drawScale, outline = self.outline, fill = self.color)
+        # self.id = roundedRect(self.canvas, self.x, self.y, self.x + self.width, self.y + self.height, self.radius, outline = self.outline, fill = self.color)
+
     def grow(self, x, y):
         self.width += x
         self.height += y
@@ -2494,31 +2850,31 @@ class RoundedRectangle(GraphicsObject):
         self.height = height
 
 def roundedRect(canvas, x1, y1, x2, y2, radius = 25, **kwargs):
-    points = [x1+radius, y1,
-              x1+radius, y1,
-              x2-radius, y1,
-              x2-radius, y1,
+    points = [x1 + radius, y1,
+              x1 + radius, y1,
+              x2 - radius, y1,
+              x2 - radius, y1,
               x2, y1,
-              x2, y1+radius,
-              x2, y1+radius,
-              x2, y2-radius,
-              x2, y2-radius,
+              x2, y1 + radius,
+              x2, y1 + radius,
+              x2, y2 - radius,
+              x2, y2 - radius,
               x2, y2,
-              x2-radius, y2,
-              x2-radius, y2,
-              x1+radius, y2,
-              x1+radius, y2,
+              x2 - radius, y2,
+              x2 - radius, y2,
+              x1 + radius, y2,
+              x1 + radius, y2,
               x1, y2,
-              x1, y2-radius,
-              x1, y2-radius,
-              x1, y1+radius,
-              x1, y1+radius,
+              x1, y2 - radius,
+              x1, y2 - radius,
+              x1, y1 + radius,
+              x1, y1 + radius,
               x1, y1]
 
     return canvas.create_polygon(points, **kwargs, smooth = True)
 #endregion
 
-# Adapted from: https://github.com/vednig/shadowTk
+# Shadow widget adapted from: https://github.com/vednig/shadowTk
 class Shadow(tk.Tk):
     # Credit: https://stackoverflow.com/questions/28089942/difference-between-fill-and-expand-options-for-tkinter-pack-method/28090362
 
@@ -2715,7 +3071,7 @@ class Shadow(tk.Tk):
                         ff.configure(width = 1, height = y1-y0+ii*2-diff_size['u']-diff_size['d'])
                         ff.place(x = xx, y = y0-ii+1+diff_size['u'])
 
-#region The content in this region was adapted heavily from: https://github.com/Aboghazala/AwesomeTkinter
+#region The content in this region is adapted from: https://github.com/Aboghazala/AwesomeTkinter
 class Tooltip:
     def __init__(self, widget, text, waitTime = 500, xOffset = 10, yOffset = 10, **kwargs):
         """
@@ -2741,7 +3097,7 @@ class Tooltip:
         self._id2 = self.widget.bind("<Leave>", self.hideTooltip, add = '+')
         self._id3 = self.widget.bind("<ButtonPress>", self.hideTooltip, add = '+')
 
-        # for dynamic tooltip, use widget.update_tooltip('new text')
+        # For dynamic tooltips, use widget.update_tooltip('new text')
         widget.update_tooltip = self.updateTooltip
 
         widget.tooltip = self
@@ -2965,7 +3321,7 @@ class ContextMenu(tk.Menu):
             self.callback(option)
 #endregion
 
-#region This window blur functionality is from: https://github.com/Peticali/PythonBlurBehind
+#region NOT USED!   This window blur functionality is adapted from: https://github.com/Peticali/PythonBlurBehind
 # # Source material from the source linked above credited the following sources: https://github.com/Opticos/GWSL-Source/blob/master/blur.py , https://www.cnblogs.com/zhiyiYo/p/14659981.html , https://github.com/ifwe/digsby/blob/master/digsby/src/gui/vista.py
 # if platform.system() == 'Windows':
 #     from ctypes.wintypes import  DWORD, BOOL, HRGN, HWND
@@ -3695,8 +4051,9 @@ def fastInverseSqrt(number):
     return y
 #endregion
 
+# Example and test code
 if __name__ == "__main__":
-    win = DEGraphWin("This is a window")
+    win = DEGraphWin("This is a window", showScrollbar = True)
     # win.setFrostedGlass(True)
     
     with win:
@@ -3704,7 +4061,7 @@ if __name__ == "__main__":
         Label("This is a label", font = "Verdana 24 bold underline")
         
         with Flow():
-            with Stack(padx=10):
+            with Stack(padx = 10):
                 my_label_text = "This text changes"
                 my_label = Label(my_label_text)
 
@@ -3726,7 +4083,7 @@ if __name__ == "__main__":
                     #     new_number = int(counting_label.text) + 1
                     #     counting_label.text = str(new_number)
             
-            with Stack(padx=10):
+            with Stack(padx = 10):
                 Message("Below is a combination of a stack and two flows, forming a grid", width=140, borderwidth=1, relief=tk.SUNKEN)
                 
                 def yes_no_cancel():
@@ -3737,18 +4094,19 @@ if __name__ == "__main__":
                         showWarning(message = "You pressed no (not based)")
                     elif response is None:
                         showError(message = "You pressed cancel")
+                        
                 Button("Yes / no / cancel", command = yes_no_cancel)
             
         with Flow():
-            edit = TextBox(width = 100, height = 20, text = "edit me")
+            edit = TextBox(width = 100, height = 50, text = "edit me")
             
             def read_edit_box():
                 showInfo(message = "Edit box says: " + edit.text)
             
-            Button("<-read edit box", command = read_edit_box)
+            Button("<- read edit box", command = read_edit_box)
             
-            editInt = TextBox(width = 100, height = 20, inputType = 'int', text = "69")
-            editFloat = TextBox(width = 100, height = 20, inputType = 'float', text = "4.20")
+            editInt = TextBox(width = 100, height = 50, inputType = 'int', text = "69")
+            editFloat = TextBox(width = 100, height = 50, inputType = 'float', text = "4.20")
         
         
         with Stack(padx=2, pady=2, borderwidth=1, relief=tk.SUNKEN):

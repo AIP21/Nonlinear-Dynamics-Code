@@ -319,7 +319,7 @@ class Window(tk.Toplevel):
     def close(self):
         self.destroy()
     
-    def _on_mousewheel(self, event):
+    def onMouseWheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
      
     def setOnClick(self, func):
@@ -373,7 +373,7 @@ class Window(tk.Toplevel):
             ),
         )
 
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind_all("<MouseWheel>", self.onMouseWheel)
 
         _pack_side = TOP
         _root = self.frame
