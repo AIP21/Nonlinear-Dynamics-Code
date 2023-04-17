@@ -467,6 +467,8 @@ class Canvas(tk.Canvas):
     
     drawnObjects = []
     
+    interactionCallback = None
+    
     def __init__(self, widgetAlignment = 'top', **kw):
         self.kw = kw
         self.widgetAlignment = widgetAlignment
@@ -482,8 +484,8 @@ class Canvas(tk.Canvas):
         _canvas = self
         _root = self
         
-        self.width = self.winfo_width()
-        self.height = self.winfo_height()
+        self.width = self.kw['width'] if 'width' in self.kw else self.winfo_width()
+        self.height = self.kw['height'] if 'height' in self.kw else self.winfo_height()
         
         self.bind("<ButtonPress-1>", self.onMouseDown)
         self.bind("<B1-Motion>", self.onMouseDrag)
@@ -531,7 +533,22 @@ class Canvas(tk.Canvas):
     def updateInteractibleDrawn(self):
         for obj in self.drawnObjects:
             if obj.shouldPanZoom:
-                obj.draw()
+                try:
+                    obj.draw()
+                except:
+                    pass
+        
+        if self.interactionCallback:
+            self.interactionCallback()
+    
+    def setInteractionCallback(self, func):
+        '''
+        Set the function to call when the user interacts with the canvas
+        
+        Args:
+            func: The function to call
+        '''
+        self.interactionCallback = func
     
     def setOnClick(self, func):
         '''
@@ -577,7 +594,9 @@ class Canvas(tk.Canvas):
         Args:
             obj: The GraphicsObject to remove
         '''
-        self.drawnObjects.remove(obj)
+        if obj in self.drawnObjects:
+            self.drawnObjects.remove(obj)
+        
         self.delete(obj.id)
     
     def resetView(self):
@@ -588,6 +607,34 @@ class Canvas(tk.Canvas):
         self.zoom = 1
         self.updateInteractibleDrawn()
     
+    def isBoundingBoxVisible(self, x1, y1, width, height):
+        '''
+        Check if a bounding box is visible on the canvas
+        
+        Args:
+            x1: The x coordinate of the top left corner of the bounding box
+            y1: The y coordinate of the top left corner of the bounding box
+            width: The width of the bounding box
+            height: The height of the bounding box
+        
+        Returns:
+            True if the bounding box is visible, False otherwise
+        '''
+        x2 = x1 + width
+        y2 = y1 + height
+        
+        x1 = x1 * self.zoom + self.offset[0] + self.dragOffset[0]
+        y1 = y1 * self.zoom + self.offset[1] + self.dragOffset[1]
+        
+        x2 = x2 * self.zoom + self.offset[0] + self.dragOffset[0]
+        y2 = y2 * self.zoom + self.offset[1] + self.dragOffset[1]
+        
+        # AABB check
+        if x1 > self.width or x2 < 0 or y1 > self.height or y2 < 0:
+            return False
+        
+        return True
+        
 class Slot(tk.Frame):
     def __init__(self, **kw):
         self.kw = kw
@@ -899,8 +946,8 @@ class Button(tk.Canvas):
     enabled = True
     mouseOver = False
     
-    def __init__(self, text, width = 120, height = 40, cornerRadius = 10, padding = 6, color = (200, 200, 200), textColor = (0, 0, 0), textFont = "Arial 10 bold", command = None, commandArgs = None, **kw):
-        tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **kw)
+    def __init__(self, text, width = 120, height = 40, cornerRadius = 10, padding = 6, color = (200, 200, 200), backgroundColor = (240, 240, 240), textColor = (0, 0, 0), textFont = "Arial 10 bold", command = None, commandArgs = None, **kw):
+        tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, bg = colorRGB(*backgroundColor), relief = "flat", highlightthickness = 0, **kw)
         self.command = command
         self.commandArgs = commandArgs
         self.kw = kw
@@ -963,11 +1010,11 @@ class Button(tk.Canvas):
             self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
         elif self.hoverEffect[0] == "darken":
             # Darken the rect
-            self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][0], self.color[1] - self.hoverEffect[1][1], self.color[2] - self.hoverEffect[1][2])
+            self.rect.color = colorRGB(clamp(self.color[0] - self.hoverEffect[1][0], 0, 255), clamp(self.color[1] - self.hoverEffect[1][1], 0, 255), clamp(self.color[2] - self.hoverEffect[1][2], 0, 255))
         elif self.hoverEffect[0] == "grow/darken":
             # Grow and darken the rect
             self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
-            self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][2][0], self.color[1] - self.hoverEffect[1][2][1], self.color[2] - self.hoverEffect[1][2][2])
+            self.rect.color = colorRGB(clamp(self.color[0] - self.hoverEffect[1][2][0], 0, 255), clamp(self.color[1] - self.hoverEffect[1][2][1], 0, 255), clamp(self.color[2] - self.hoverEffect[1][2][2], 0, 255))
         elif self.hoverEffect[0] == "color":
             # Change the rect color
             self.rect.color = colorRGB(*self.hoverEffect[1])
@@ -1011,7 +1058,7 @@ class Button(tk.Canvas):
             return
         
         # Darken the background color
-        self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
+        self.rect.color = colorRGB(clamp(self.color[0] - 50, 0, 255), clamp(self.color[1] - 50, 0, 255), clamp(self.color[2] - 50, 0, 255))
         
         # Slightly shrink the rect
         self.rect.grow(-2, -2)
@@ -1019,35 +1066,28 @@ class Button(tk.Canvas):
         self.rect.draw()
         
         self.lift(self.label)
-
+    
     def onRelease(self, event):
         if not self.enabled:
             return
         
         # Return the background color to normal (or hover color if hovering over button)
         if self.mouseOver:
-            self.rect.color = colorRGB(*self.color)
-            self.rect.grow(2, 2)
+            self.rect.color = colorRGB(clamp(self.color[0] - 50, 0, 255), clamp(self.color[1] - 50, 0, 255), clamp(self.color[2] - 50, 0, 255))
+            self.rect.resize(self.width - self.padding * 2, self.height - self.padding * 2)
+            self.rect.setPos(self.padding, self.padding)
             
-            if self.hoverEffect[0] == "darken":
-                # Darken the rect
-                self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][0], self.color[1] - self.hoverEffect[1][1], self.color[2] - self.hoverEffect[1][2])
-            elif self.hoverEffect[0] == "grow/darken":
-                # Grow and darken the rect
-                self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][2][0], self.color[1] - self.hoverEffect[1][2][1], self.color[2] - self.hoverEffect[1][2][2])
-            elif self.hoverEffect[0] == "color":
-                # Change the rect color
-                self.rect.color = colorRGB(*self.hoverEffect[1])
-            elif self.hoverEffect[0] == "none":
-                self.rect.color = colorRGB(*self.color)
+            self.hoverEnter(None)
         else:
-            self.rect.color = colorRGB(*self.color)
-            self.rect.grow(2, 2)
+            self.rect.color = colorRGB(clamp(self.color[0] - 50, 0, 255), clamp(self.color[1] - 50, 0, 255), clamp(self.color[2] - 50, 0, 255))
+            self.rect.resize(self.width - self.padding * 2, self.height - self.padding * 2)
+            self.rect.setPos(self.padding, self.padding)
         
         self.rect.draw()
+        
         self.lift(self.label)
         
-        if(self.mouseOver):
+        if self.mouseOver:
             if self.command is not None:
                 if self.commandArgs is not None:
                     self.command(*self.commandArgs)
@@ -2229,8 +2269,12 @@ class Slider(tk.Canvas):
         if not self.enabled:
             return
         
-        self.setValue(clamp(self.value + event.delta, self.start, self.end))
+        self.setValue(clamp(self.value - (event.delta / 120) * self.step, self.start, self.end))
 
+        # Call change function
+        if self.dragFunc != None:
+            self.dragFunc(self.getValue())
+        
     def hoverEnter(self, event):
         self.mouseOver = True
         
@@ -2275,7 +2319,7 @@ class Slider(tk.Canvas):
         
         # Call change function
         if self.dragFunc != None:
-            self.dragFunc(event)
+            self.dragFunc(self.getValue())
     
     def onClickDown(self, event):
         if not self.enabled:
@@ -2290,7 +2334,7 @@ class Slider(tk.Canvas):
         
         # Call change function
         if self.dragFunc != None:
-            self.dragFunc(event)
+            self.dragFunc(self.getValue())
     
     def onClickUp(self, event):
         if not self.enabled:
@@ -2320,7 +2364,7 @@ class Slider(tk.Canvas):
             self.track.draw()
         
         # Set text
-        self.text.setText(str(round(self.getValue(), 1)) + self.suffix)
+        self.text.setText(str(round(self.getValue(), 2)) + self.suffix)
         self.text.draw()
         
         # Set thumb position
@@ -2331,7 +2375,7 @@ class Slider(tk.Canvas):
         self._raiseElements()
     
     def getValue(self):
-        return int(self.value) if isInt(self.step) else self.value
+        return int(self.value) if (isInt(self.step) and self.step != 0) else self.value
     
     # Convert a pixel coordinate into this slider's range and using the step value (clamped)
     def convertToLocal(self, x):
@@ -2388,7 +2432,7 @@ class SliderWithTextInput(Flow):
         
         self.command = command
         
-        inputType = "int" if isInt(step) else "decimal"
+        inputType = "int" if (isInt(step) and step != 0) else "decimal"
         
         with self:
             # Create the slider
@@ -2412,7 +2456,7 @@ class SliderWithTextInput(Flow):
         
     def onSliderInput(self, event):
         # Set the text input value
-        self.textInput.text = str(self.slider.getValue())
+        self.textInput.text = str(round(self.slider.getValue(), 2))
         
         if self.command != None:
             self.command(self.slider.getValue())
@@ -2524,6 +2568,8 @@ class Popup:
         win.wm_geometry("+%d+%d" % (x, y))
         self.label.pack(side = TOP, fill = 'both', pady = (5, 0))
         self.closeButton.pack(pady = (10, 10))
+        
+        win.focus()
     
     def close(self):
         if self.closeCommand != None:
@@ -2556,20 +2602,25 @@ def openColorChooser(initialColor = None):
 
 class ColorWidget(Flow):
     '''
-    A widget that displays a color and allows the user to change it
+    A widget that displays a color, its name, and allows the user to change it
     '''
-    def __init__(self, name, color, width = 100, height = 50):
-        super().__init__(width = width, height = height)
+    def __init__(self, name, color, colorChangeCommand, buttonLabelPrefix = "Edit ", width = 100, height = 30):
+        super().__init__()
         
         self.name = name
         self.color = color
+        self.colorChangeCommand = colorChangeCommand
         
-        self.editButton = Button("🖋️", 50, 50, color = color, textFont = "Arial 15", command = self.editColor) #, command = self.editColor, color = colorRGB(*self.color)) # 🖋️
-        self.label = Label(self.name, width = 5, bg = 'red')
+        with self:
+            self.editButton = Button(buttonLabelPrefix + name, width, height, color = color, textFont = "Arial 12", command = self.editColor)
     
-    def editColor(self, event):
-        self.color = openColorChooser(self.color)
-        self.editButton.setColor(self.color) 
+    def editColor(self):
+        returned = openColorChooser(self.color)
+        if returned != None:
+            self.color = colorToRGB(returned)
+            self.editButton.setColor(self.color)
+            
+            self.colorChangeCommand(self.name, self.color)
 
 #region Shape graphics stuff
 # Abstract Base
@@ -2632,7 +2683,6 @@ class GraphicsObject:
 
     def draw(self):
         self.canvas.delete(self.id)
-        self.isDrawn = False
         
         # TODO: This is duct tape because I couldn't be bothered to fix the problem fully (some canvasses that these objects can be drawn on don't implement addDrawn or removeDrawn). Actually fix this!
         if self.shouldPanZoom:
@@ -2644,7 +2694,7 @@ class GraphicsObject:
                 self._draw(self.x, self.y, 1)
         else:
             self._draw(self.x, self.y, 1)
-            
+        
         try:
             self.canvas.addDrawn(self)
         except:
@@ -2658,9 +2708,9 @@ class GraphicsObject:
     def undraw(self):
         # TODO: This is duct tape because I couldn't be bothered to fix the problem fully (some canvasses that these objects can be drawn on don't implement addDrawn or removeDrawn). Actually fix this!
         try:
-            if self.isDrawn:
-                self.canvas.removeDrawn(self.id)
-                self.isDrawn = False
+            # if self.isDrawn:
+            self.canvas.removeDrawn(self.id)
+            self.isDrawn = False
         except:
             pass
     
@@ -2754,7 +2804,7 @@ class Text(GraphicsObject):
         self.font = font
 
     def _draw(self, drawX, drawY, drawScale):
-        self.id = self.canvas.create_text(drawX, drawY, width = self.width * drawScale, text = self.text, justify = self.justify, font = self.font, outline = self.outline, fill = self.color)
+        self.id = self.canvas.create_text(drawX, drawY, width = self.width, text = self.text, justify = self.justify, font = self.font, outline = self.outline, fill = self.color)
         # self.id = self.canvas.create_text(self.x, self.y, width = self.width,text = self.text, justify = self.justify, font = self.font, outline = self.outline, fill = self.color)
 
     def getText(self):
@@ -3603,6 +3653,25 @@ def colorToRGBA(color):
         return color
     else:
         return ImageColor.getcolor(color, 'RGBA')
+
+def colorToRGB(color):
+    """Convert color names or hex notation to RGB,
+    Args:
+        color (str): color e.g. 'white' or '#333' or formats like #rgb or #rrggbb
+    Returns:
+        (3-tuple): tuple of format (r, g, b) e.g. it will return (255, 0, 0) for solid red
+    """
+
+    if color is None:
+        return None
+
+    if isinstance(color, (tuple, list)):
+        if len(color)  ==  3:
+            r, g, b = color
+            color = r, g, b
+        return color
+    else:
+        return ImageColor.getcolor(color, 'RGB')
 
 def isColorDark(color):
     """rough check if color is dark or light
