@@ -1905,12 +1905,22 @@ class Plot(tk.Canvas):
     
     def plot(self, x, y, color):
         self.imageP.put("{color}".format(color = colorRGB(*color)), (x, y))
+    
+    '''
+    Plot a list of pixel colors (as strings), starting from a point
+    '''
+    def plotBulk(self, xStart, yStart, colorList):
+        # colorStr = ""
+        # for row in range(len(colors)):
+        #     rowStr = "{"
             
-    # def plotPoints(self, points, color):
-        
+        #     for pix in colors[row]:
+        #         rowStr += colorRGB(*pix) + " "
             
-    def plotBulk(self, xStart, yStart, colors):
-        self.imageP.put(colors, (xStart, yStart))
+        #     rowStr = rowStr[:len(rowStr) - 2] + "} "
+        #     colorStr += rowStr
+    
+        self.imageP.put(colorList, (xStart, yStart))
         
     def fill(self, color, x, y, width, height):
         '''
