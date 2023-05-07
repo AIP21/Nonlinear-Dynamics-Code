@@ -1844,17 +1844,19 @@ class Plot(tk.Canvas):
     clickUpFunc = None
     dragFunc = None
     
-    def __init__(self, width, height, background = 'white'):
+    def __init__(self, width, height, imageHeight, imageWidth, background = 'white'):
         self.width = width
         self.height = height
+        self.imageHeight = imageHeight
+        self.imageWidth = imageWidth
         self.background = background
         
         super().__init__(_root, width = self.width, height = self.height, bd = 0, highlightthickness = 0)
             
-        self.imageP = PhotoImage(master = _root, height = self.height, width = self.width)
+        self.imageP = PhotoImage(master = _root, width = self.imageWidth, height = self.imageHeight)
         
         # Set background color
-        self.imageP.put(background, to = (0, 0, self.width, self.height))
+        self.imageP.put(background, to = (0, 0, self.imageWidth, self.imageHeight))
         
         self.imageObj = self.create_image(0, 0, image = self.imageP, anchor = tk.NW)
         self.pack(side = _pack_side)
@@ -1926,7 +1928,7 @@ class Plot(tk.Canvas):
         '''
         Fill a rectangle with a color
         '''
-        colorRows = ""
+        colorRows = []
         
         for y in range(height):
             rowColors = []
@@ -1934,12 +1936,12 @@ class Plot(tk.Canvas):
             for x in range(width):
                 rowColors.append(color)
             
-            colorRows += ("{" + str(rowColors)[1:-1].replace('\'', '').replace(',', '') + "} ")
+            colorRows.append(rowColors)
         
         self.imageP.put(rowColors, to = (x, y))
     
     def reset(self):
-        self.fill(self.background, 0, 0, self.width, self.height)
+        self.fill(self.background, 0, 0, self.imageWidth, self.imageHeight)
     
     def clear(self):
         self.imageP.blank()
