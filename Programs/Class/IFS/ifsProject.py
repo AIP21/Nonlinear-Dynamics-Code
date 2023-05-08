@@ -1,11 +1,17 @@
 import random
 from Lib.NewDEGraphics import *
 from Lib.transform import *
+from tkinter.font import Font
+import os
 
 class IFSExplorer:
+    UI_IMAGES = {}
+    
     WIDTH = 800
     HEIGHT = 400
     PLOT_SIZE = WIDTH // 2
+    
+    pixelFont = None
 
     pixels = []
 
@@ -33,8 +39,12 @@ class IFSExplorer:
     drawPadding = [10, 10]
     
     def __init__(self):
-        win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT)
-
+        self.initImages(os.path.dirname(os.path.realpath(__file__)))
+        
+        win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT, scale = 0.25)
+        
+        self.pixelFont = Font(family = "Small Fonts", size = 70)
+        
         # Initialize the pixels array
         for x in range(self.PLOT_SIZE):
             col = []
@@ -47,7 +57,6 @@ class IFSExplorer:
         # UI stuff
         with win:
             with Flow():
-                
                 # Create the canvas and plot for drawing the IFS                
                 with Canvas(width = self.PLOT_SIZE):
                     self.plot = Plot(self.PLOT_SIZE, self.PLOT_SIZE, self.PLOT_SIZE, self.PLOT_SIZE)
@@ -58,18 +67,43 @@ class IFSExplorer:
                 # Create the GUI
                 self.createControlPanel()
     
+    #region UI Images
+    # Load every image the local data path
+    # These are pixel art images of the UI elements
+    def initImages(self, path):
+        for file in os.listdir(path + "/Data"):
+            fileStr = str(file)
+            
+            if fileStr.endswith(".png"):
+                sizeStartInd = fileStr.find("_") + 1
+                sizeEndInd = fileStr.find(".")
+                xInd = fileStr.find("x", sizeStartInd)
+                
+                width = int(fileStr[sizeStartInd:xInd])
+                height = int(fileStr[xInd + 1:sizeEndInd])
+                
+                self.UI_IMAGES["file"] = (path + "/Data/" + file, width, height)
+    
+    # Get an image by name
+    def getImage(self, name):
+        return self.UI_IMAGES[name]
+    #endregion
+    
     # Create the control panel
     def createControlPanel(self):
         with Stack(bg = 'blue'):
-            Label("Controls")
+            Label("Controls", font = self.pixelFont)
+            
+            Button("",)
             
             # for i in range(len(self.transforms)):
             #     self.
 
+    # Plot the IFS
     def plotIFS(self):
         for i in range(100000):
                 self.iterate(False)
-            
+        
         print("MinX: " + str(self.minX))
         print("MaxX: " + str(self.maxX))
         print("MinY: " + str(self.minY))

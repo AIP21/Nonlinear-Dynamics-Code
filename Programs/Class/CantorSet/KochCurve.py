@@ -31,8 +31,13 @@ class KochCurve:
     lines = ""
 
     def __init__(self):
+        # import ctypes
+ 
+        # ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        
         self.win = DEGraphWin("Koch Curve", self.width, self.height, showScrollbar = False, debugMode = True)
-            
+        # self.win.call('tk', 'scaling', 2)
+        
         # Check if its the first time running the program
         self.firstTime = False
         if not os.path.exists("KochCurveData DO NOT OPEN (just kidding you can open it if you want to).txt"):
