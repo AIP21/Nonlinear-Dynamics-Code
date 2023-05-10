@@ -1135,166 +1135,143 @@ class Button(tk.Canvas):
 
 class ButtonImage(tk.Canvas):
     """
-    A button made up of an image. There is a normal image and a clicked image. Has a hover and click effect.
+    A button made up of an image. There is a normal image and a clicked image. Has a hover effect.
 
     Args:
-        text: The button's label text
+        image: The image to show when not pressed
+        pressedImage: The image to show when pressed
         width: Width of the button
         height: Height of the button
-        cornerRadius: Radius of the rounded corners
-        padding: Padding between the edge of the button and the text
-        color: Color of the button background
-        textColor: Color of the button text
-        textFont: Font of the button text
         command: Function to be called when the button is clicked
         commandArgs: Arguments to be passed to the command function
     """
     
-    hoverEffect = ("grow/darken", (4, 4, (20, 20, 20)))
+    # hoverEffect = ("grow", (4, 4, (20, 20, 20)))
     enabled = True
     mouseOver = False
     
-    def __init__(self, image, clickedImage, width = 120, height = 40, padding = 6, command = None, commandArgs = None, **kw):
-        tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, bg = colorRGB(*backgroundColor), relief = "flat", highlightthickness = 0, **kw)
+    def __init__(self, image, pressedImage, width = 40, height = 40, command = None, commandArgs = None, **kw):
+        tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **kw)
         self.command = command
         self.commandArgs = commandArgs
         self.kw = kw
         self.width = width
         self.height = height
-        self.padding = padding
-        self.image = image
-        self.clickedImage = clickedImage
+        self.image = PhotoImage(file = image)
+        self.resizeImage(self.width, self.height)
+        self.pressedImage = PhotoImage(file = pressedImage)
 
         # Create representation image
-        self.img = GraphicsImage(0, 0, self.image, canvas = self)
+        self.img = GraphicsImage(self.width / 2, self.height / 2, self.image, canvas = self)
         self.img.draw()
         
         # Bind actions
         self.bind("<ButtonPress-1>", self.onPress)
         self.bind("<ButtonRelease-1>", self.onRelease)
-        # self.bind('<Enter>', self.hoverEnter)
-        # self.bind('<Leave>', self.hoverExit)
+        self.bind('<Enter>', self.hoverEnter)
+        self.bind('<Leave>', self.hoverExit)
     
         self.pack(side = _pack_side)
     
-    def setImage(self, image):
+    def setImage(self, image, imgWidth, imgHeight):
         '''
         Set the button's normal image
         '''
         
-        self.image = image
+        self.imgWidth = imgWidth
+        self.imgHeight = imgHeight
+        
+        self.image = PhotoImage(file = image).zoom(x = self.imgWidth / self.width, y = self.imgHeight / self.height)
         self.img.image = self.image
         self.img.draw()
 
-    def setClickedImage(self, clickedImage):
+    def setPressedImage(self, pressedImage):
         '''
-        Set the button's clicked image
+        Set the button's pressed image
         '''
         
-        self.clickedImage = clickedImage
+        self.pressedImage = PhotoImage(file = pressedImage).zoom(x = self.imgWidth / self.width, y = self.imgHeight / self.height)
+        self.pressedImage = pressedImage
     
-    # def setHoverEffect(self, hoverEffect):
-    #     '''
-    #     Set the button's hover effect
+    def setHoverEffect(self, hoverEffect):
+        '''
+        Set the button's hover effect
         
-    #     Options:
-    #         "grow (x, y)": The button will grow when hovered over (default).
-    #         "darken (r, g, b)": The button will darken when hovered over.
-    #         "grow/darken (x, y, (r, g, b))": The button will grow and darken when hovered over.
-    #         "color (r, g, b)": The button will change color when hovered over.
-    #         "none": The button will not have a hover effect
-    #     '''
+        Options:
+            "grow (x, y)": The button will grow when hovered over (default).
+            "darken (r, g, b)": The button will darken when hovered over.
+            "grow/darken (x, y, (r, g, b))": The button will grow and darken when hovered over.
+            "color (r, g, b)": The button will change color when hovered over.
+            "none": The button will not have a hover effect
+        '''
         
-    #     self.hoverEffect = hoverEffect
+        self.hoverEffect = hoverEffect
     
-    # def hoverEnter(self, event):
-    #     self.mouseOver = True
+    def resizeImage(self, x, y):
+        xDiv = int((self.width / x) * 10)
+        yDiv = int((self.height / y) * 10)
+        xDiv2 = int((x / self.width) * 10)
+        yDiv2 = int((y / self.height) * 10)
         
-    #     if not self.enabled:
-    #         return
+        self.image = self.image.zoom(xDiv, yDiv)
+        self.image = self.image.subsample(10, 10)
+    
+    def hoverEnter(self, event):
+        self.mouseOver = True
         
-    #     if self.hoverEffect[0] == "grow":
-    #         # Grow the rect
-    #         self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
-    #     elif self.hoverEffect[0] == "darken":
-    #         # Darken the rect
-    #         self.rect.color = colorRGB(clamp(self.color[0] - self.hoverEffect[1][0], 0, 255), clamp(self.color[1] - self.hoverEffect[1][1], 0, 255), clamp(self.color[2] - self.hoverEffect[1][2], 0, 255))
-    #     elif self.hoverEffect[0] == "grow/darken":
-    #         # Grow and darken the rect
-    #         self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
-    #         self.rect.color = colorRGB(clamp(self.color[0] - self.hoverEffect[1][2][0], 0, 255), clamp(self.color[1] - self.hoverEffect[1][2][1], 0, 255), clamp(self.color[2] - self.hoverEffect[1][2][2], 0, 255))
-    #     elif self.hoverEffect[0] == "color":
-    #         # Change the rect color
-    #         self.rect.color = colorRGB(*self.hoverEffect[1])
-    #     elif self.hoverEffect[0] == "none":
-    #         pass
+        # if not self.enabled:
+        #     return
         
-    #     self.rect.draw()
-    #     self.lift(self.label)
+        # if self.hoverEffect[0] == "grow":
+        #     # Grow the rect
+        #     self.img.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
+        # elif self.hoverEffect[0] == "none":
+        #     pass
         
-    # def hoverExit(self, event):
-    #     self.mouseOver = False
+        # self.img.draw()
         
-    #     if not self.enabled:
-    #         return
+    def hoverExit(self, event):
+        self.mouseOver = False
         
-    #     if self.hoverEffect[0] == "grow":
-    #         # Shrink the rect
-    #         # self.rect.shrink(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
-    #         self.rect.setPos(self.padding, self.padding)
-    #         self.rect.resize(self.width - self.padding * 2, self.height - self.padding * 2)
-    #     elif self.hoverEffect[0] == "darken":
-    #         # Return the rect color to normal
-    #         self.rect.color = colorRGB(*self.color)
-    #     elif self.hoverEffect[0] == "grow/darken":
-    #         # Return the rect size and color to normal
-    #         # self.rect.shrink(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
-    #         self.rect.setPos(self.padding, self.padding)
-    #         self.rect.resize(self.width - self.padding * 2, self.height - self.padding * 2)
-    #         self.rect.color = colorRGB(*self.color)
-    #     elif self.hoverEffect[0] == "color":
-    #         # Return the rect color to normal
-    #         self.rect.color = colorRGB(*self.color)
-    #     elif self.hoverEffect[0] == "none":
-    #         pass
+        # if not self.enabled:
+        #     return
         
-    #     self.rect.draw()
-    #     self.lift(self.label)
+        # if self.hoverEffect[0] == "grow":
+        #     # Shrink the rect
+        #     self.img.grow(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
+        #     self.img.setPos(self.padding, self.padding)
+        #     self.img.resize(self.width - self.padding * 2, self.height - self.padding * 2)
+        # elif self.hoverEffect[0] == "none":
+        #     pass
+        
+        # self.img.draw()
 
     def onPress(self, event):
         if not self.enabled:
             return
         
-        # Darken the background color
-        self.rect.color = colorRGB(clamp(self.color[0] - 50, 0, 255), clamp(self.color[1] - 50, 0, 255), clamp(self.color[2] - 50, 0, 255))
+        # Change the image to the pressed image
+        self.img.setImage(self.pressedImage)        
         
-        # Slightly shrink the rect
-        self.rect.grow(-2, -2)
-        
-        self.rect.draw()
-        
-        self.lift(self.label)
+        self.img.draw()
     
     def onRelease(self, event):
         if not self.enabled:
             return
         
         # Return the background color to normal (or hover color if hovering over button)
-        if self.mouseOver:
-            self.rect.color = colorRGB(clamp(self.color[0] - 50, 0, 255), clamp(self.color[1] - 50, 0, 255), clamp(self.color[2] - 50, 0, 255))
-            self.rect.resize(self.width - self.padding * 2, self.height - self.padding * 2)
-            self.rect.setPos(self.padding, self.padding)
+        # if self.mouseOver:
+        #     # self.img.color = colorRGB(clamp(self.color[0] - 50, 0, 255), clamp(self.color[1] - 50, 0, 255), clamp(self.color[2] - 50, 0, 255))
+        #     self.img.resize(self.width - self.padding * 2, self.height - self.padding * 2)
+        #     self.img.setPos(self.padding, self.padding)
             
-            self.hoverEnter(None)
-        else:
-            self.rect.color = colorRGB(clamp(self.color[0] - 50, 0, 255), clamp(self.color[1] - 50, 0, 255), clamp(self.color[2] - 50, 0, 255))
-            self.rect.resize(self.width - self.padding * 2, self.height - self.padding * 2)
-            self.rect.setPos(self.padding, self.padding)
+        #     self.hoverEnter(None)
         
-        self.rect.draw()
+        # Change the image to the clicked image
+        self.img.setImage(self.image)      
         
-        self.lift(self.label)
-        
+        self.img.draw()
+                
         if self.mouseOver:
             if self.command is not None:
                 if self.commandArgs is not None:
@@ -1310,30 +1287,19 @@ class ButtonImage(tk.Canvas):
         
         self.config(state = tk.DISABLED)
         
-        # Lighten the text color and darken the background color
-        self.itemconfig(self.label, fill = colorRGB(min(255, self.textColor[0] + 100), min(255, self.textColor[1] + 100), min(255, self.textColor[2] + 100)))
-        self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
+        # Darken the background color
+        # self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
     
     def enable(self):
         self.enabled = True
         
         self.config(state = tk.NORMAL)
         
-        # Return the text color and the background color to normal
-        self.itemconfig(self.label, fill = colorRGB(max(0, self.textColor[0] - 100), max(0, self.textColor[1] - 100), max(0, self.textColor[2] - 100)))
-        self.rect.color = colorRGB(*self.color)
+        # Return the background color to normal
+        # self.rect.color = colorRGB(*self.color)
     
     def isEnabled(self):
         return self.enabled
-    
-    @property
-    def text(self):
-        return self.labelText
-    
-    @text.setter
-    def text(self, text):
-        self.labelText = text
-        self.itemconfig(self.label, text = self.labelText)
 
 class Label(tk.Label):
     '''
@@ -2892,7 +2858,7 @@ class GraphicsObject:
         self.y = y
         self.shouldPanZoom = shouldPanZoom
         
-        if type(color) == str:
+        if type(color) == str or color == None:
             self.color = color
         else:
             self.color = colorRGB(*color)
@@ -3719,6 +3685,22 @@ class ContextMenu(tk.Menu):
 #endregion
 
 #region Utils
+# Convert a number to int by multiplying by 10 enough times to remove up to two decimals
+# def toFullNumber(val):
+#     if (isInt(val)):
+#         return val
+    
+#     strInt = str(val)
+#     strInt = strInt[strInt.find('.') + 1 : strInt.find('.') + 3]
+    
+#     return int(val * 10 ** (len(strInt) - strInt.find('.') - 1))
+
+def removeTrailingZeros(val):
+    """
+    Remove trailing zeros from float or int
+    """
+    return val if val % 1 else int(val)
+
 def isInt(input):
     try:
         int(input)

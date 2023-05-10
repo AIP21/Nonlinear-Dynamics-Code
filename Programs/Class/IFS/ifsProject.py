@@ -2,6 +2,7 @@ import random
 from Lib.NewDEGraphics import *
 from Lib.transform import *
 from tkinter.font import Font
+from tkinter import PhotoImage
 import os
 
 class IFSExplorer:
@@ -41,7 +42,7 @@ class IFSExplorer:
     def __init__(self):
         self.initImages(os.path.dirname(os.path.realpath(__file__)))
         
-        win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT, scale = 0.25)
+        win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT, scale = 1) # 0.25
         
         self.pixelFont = Font(family = "Small Fonts", size = 70)
         
@@ -82,22 +83,51 @@ class IFSExplorer:
                 width = int(fileStr[sizeStartInd:xInd])
                 height = int(fileStr[xInd + 1:sizeEndInd])
                 
-                self.UI_IMAGES["file"] = (path + "/Data/" + file, width, height)
+                fileName = fileStr[:sizeStartInd - 1]
+                
+                self.UI_IMAGES[fileName] = (path + "\Data\\" + file, width, height)
     
-    # Get an image by name
+    # Get an image path by name
     def getImage(self, name):
-        return self.UI_IMAGES[name]
+        return self.UI_IMAGES[name][0]
     #endregion
     
     # Create the control panel
     def createControlPanel(self):
-        with Stack(bg = 'blue'):
-            Label("Controls", font = self.pixelFont)
+        with Stack(bg = 'green'):
+            # Label("Controls", font = self.pixelFont)
             
-            Button("",)
+            # ButtonImage(image = self.getImage("power button up"), pressedImage = self.getImage("power button down"), width = 40, height = 40, command = self.quit)
             
-            # for i in range(len(self.transforms)):
-            #     self.
+            # with Stack():
+            for i in range(len(self.transforms)):
+                self.createConfigPanel(i)
+    
+    def createConfigPanel(self, index):
+        with Stack(relief = 'raised', borderwidth = 2):
+            Label("Transform: " + str(index + 1))
+            
+            with Flow():
+                x = TextBox(50, 20, str(self.transforms[index].getR()))
+                y = TextBox(50, 20, str(self.transforms[index].getS()))
+            with Flow():
+                theta = TextBox(50, 20, str(self.transforms[index].getTheta()))
+                phi = TextBox(50, 20, str(self.transforms[index].getPhi()))
+            with Flow():
+                h = TextBox(50, 20, str(self.transforms[index].getE()))
+                k = TextBox(50, 20, str(self.transforms[index].getF()))
+                
+            updateButton = Button("Update", command = self.updateTransform, commandArgs = [(index, float(x.text), float(y.text), float(theta.text), float(phi.text), float(h.text), float(k.text))])
+
+    def updateTransform(self, index, x, y, theta, phi, h, k):
+        self.transforms[index] = IFS_Transform(xScale = x, yScale = y,
+                                               theta = theta, phi = phi,
+                                               h = h, k = k,
+                                               p = 1, c = 'red')
+
+        self.plot.clear()
+        
+        self.plotIFS()
 
     # Plot the IFS
     def plotIFS(self):
@@ -147,6 +177,10 @@ class IFSExplorer:
     # Remap the point to stay within the screen size and within the border padding
     def remapPoint(self, point):
         return (int(lerp(self.drawPadding[0], self.PLOT_SIZE - self.drawPadding[0], point[0])), self.PLOT_SIZE - 1 - int(lerp(self.drawPadding[0], self.PLOT_SIZE - self.drawPadding[0], point[1])))
+
+    # Quit the program
+    def quit(self):
+        exit()
 
 #region Utils
 def remap(value, low1, high1, low2, high2):
