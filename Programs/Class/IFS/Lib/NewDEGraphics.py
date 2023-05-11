@@ -155,7 +155,7 @@ class DEGraphWin(tk.Tk):
     
     dragStart = (0, 0)
     
-    def __init__(self, title = "DE Graphics Window", width = 500, height = 500, scale = 1, showScrollbar = False, edgePadding = [0, 0, 0, 0], debugMode = False, **kw):
+    def __init__(self, title = "DE Graphics Window", width = 500, height = 500, scale = 1, showScrollbar = False, x = -1, y = -1, edgePadding = [0, 0, 0, 0], debugMode = True, **kw):
         tk.Tk.__init__(self, sync = debugMode, **kw)
         self.setScale(scale)
         self.title(title)
@@ -173,9 +173,11 @@ class DEGraphWin(tk.Tk):
         # self.config(bg = 'green')
         # self.wm_attributes("-transparent", 'green')
         
+        x = x if x != -1 else (self.winfo_screenwidth() - width) / 2
+        y = y if y != -1 else (self.winfo_screenheight() - height) / 2
         
-        # Set window size
-        self.geometry('%dx%d' % (width, height))
+        # Set window size and position
+        self.geometry('%dx%d+%d+%d' % (width, height, x, y))
     
         # Blur the background
         # GlobalBlur(self.HWND)
@@ -199,6 +201,12 @@ class DEGraphWin(tk.Tk):
 
     def close(self):
         self.destroy()
+    
+    def hideTitlebar(self):
+        self.wm_overrideredirect(True)
+    
+    def showTitlebar(self):
+        self.wm_overrideredirect(False)
     
     def onMouseWheel(self, event):
         self.canvas.yview_scroll(int(-1 * event.delta), 'units')
@@ -313,7 +321,7 @@ class Window(tk.Toplevel):
     A window for displaying anything.
     
     Usage:
-        win = Window(title = "Test Window", width = 100, height = 100)
+        win = Window(root = NAME_OF_DEGRAPHWIN, title = "Test Window", width = 100, height = 100)
         with win:
             Label("Hello World!")
 
@@ -328,8 +336,9 @@ class Window(tk.Toplevel):
     showScrollbar = False
     edgePadding = (10, 10, 10, 10)
     
-    def __init__(self, title = "Window", width = 500, height = 500, x = 100, y = 100, edgePadding = (10, 10, 10, 10), showScrollbar = False, **kw):
-        tk.Toplevel.__init__(self)
+    def __init__(self, root, title = "Window", width = 500, height = 500, scale = 1, x = 100, y = 100, edgePadding = (10, 10, 10, 10), showScrollbar = False, **kw):
+        tk.Toplevel.__init__(self, master = root)
+        self.setScale(scale)
         self.title(title)
         self.kw = kw
         self.width = width
@@ -342,6 +351,11 @@ class Window(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.geometry('%dx%d+%d+%d' % (self.width, self.height, self.x, self.y))
     
+    # Set the UI scale
+    def setScale(self, newScale):
+        self.scale = newScale
+        self.tk.call('tk', 'scaling', self.scale)
+
     def close(self):
         self.destroy()
     
@@ -442,7 +456,7 @@ class Window(tk.Toplevel):
         self.canvas.bind("<Configure>", resize_canvas)
         
         # Update the geometry management
-        self.frame.update_idletasks()
+        # self.frame.update_idletasks()
 
         # Set min window width
         self.update()
@@ -450,9 +464,6 @@ class Window(tk.Toplevel):
         self.config(**self.kw)
         
         self.frame.update()
-        
-        # Start mainloop
-        self.mainloop()
                 
         _pack_side = None
         
@@ -841,83 +852,52 @@ class HideableFrame(Slot):
         _root = self._root_old
         _pack_side = self._pack_side_old
 
-class ScrollableFrame(tk.Frame):
+class HorizontalScrollView(Flow):
     """
-    A frame that you can scroll through. It has a scroll bar.
+    A frame that you can scroll through horizontally
     
     Usage:
-        with ScrollableFrame():
+        with ScrollView():
             # add your widgets here
     """
     
     def __init__(self, **kw):
-        self.kw = kw
+        Flow.__init__(self, **kw)
+        
+        # self.canvas.bind("<MouseWheel>", self.onMouseWheel)
     
-    def onMouseWheel(self, event):
-        self.canvas.yview_scroll(int(-1 * event.delta), 'units')
-
     def __enter__(self):
-        global _root, _pack_side
-        self._root_old = _root
-        self._pack_side_old = _pack_side
-        tk.Frame.__init__(self, self._root_old, **self.kw)
-        
-        # Create scroll bar
-        self.vscrollbar = AutoScrollbar(self)
-        self.vscrollbar.grid(row = 0, column = 1, sticky = N+S)
-
-        # Make the canvas expandable
-        self.grid_rowconfigure(0, weight = 1)
-        self.grid_columnconfigure(0, weight = 1)
-
-        # Create canvas
-        self.canvas = tk.Canvas(self, bd = 0, borderwidth = 0, highlightthickness = 0, yscrollcommand = self.vscrollbar.set, yscrollincrement = 7)
-        self.canvas.grid(row = 0, column = 0, sticky = N+S+E+W)
-
-        # Configure scroll bar for canvas
-        self.vscrollbar.config(command = self.canvas.yview)
-
-        # Bind mouse wheel to canvas
-        self.canvas.bind_all("<MouseWheel>", self.onMouseWheel)
-        
-        # Create frame in canvas
-        self.frame = tk.Frame(self.canvas, borderwidth = 0, highlightthickness = 0, bd = 0)
-        self.frame.columnconfigure(0, weight = 1)
-        self.frame.columnconfigure(1, weight = 1)
-        
-        # Configure scroll region in frame
-        self.frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(
-                scrollregion = self.canvas.bbox("all")
-            ),
-        )
-        
-        self.pack(side = self._pack_side_old, fill = tk.X)
-        _pack_side = TOP
-        _root = self.frame
-        return self.frame
+        super().__enter__()
     
-    def __exit__(self, type, value, traceback):
-        global _root, _pack_side
+        def onMouseWheel(event):
+            print(event.delta)
+            self.canvas.xview_scroll(int(-1 * event.delta), 'units')
         
-        # Puts tkinter widget onto canvas
-        self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(self.canvas.config()['width'][4]) - int(self.vscrollbar.config()['width'][4]))
+        self.canvas.bind_all("<MouseWheel>", onMouseWheel)
+
+
+class VerticalScrollView(Flow):
+    """
+    A frame that you can scroll through vertically
     
-        # Handle the canvas being resized
-        def resize_canvas(event):
-            self.canvas.create_window(0, 0, anchor = NW, window = self.frame, width = int(event.width) - int(self.vscrollbar.config()['width'][4]))
+    Usage:
+        with VerticalScrollView():
+            # add your widgets here
+    """
     
-        # Set canvas scroll region to the entire canvas
-        self.canvas.config(scrollregion = self.canvas.bbox("all"))
-        self.canvas.bind("<Configure>", resize_canvas)
+    def __init__(self, **kw):
+        Flow.__init__(self, **kw)
         
-        self.update()
+        # self.canvas.bind("<MouseWheel>", self.onMouseWheel)
+    
+    def __enter__(self):
+        super().__enter__()
+    
+        def onMouseWheel(event):
+            print(event.delta)
+            self.canvas.yview_scroll(int(-1 * event.delta), 'units')
         
-        self.frame.update()
-        
-        _root = self._root_old
-        _pack_side = self._pack_side_old
+        self.canvas.bind_all("<MouseWheel>", onMouseWheel)
 
 class Separator(tk.Canvas):
     def __init__(self, width, height, horizontalSpacing, verticalSpacing, color = (100, 100, 100), **kw):
@@ -1133,7 +1113,7 @@ class Button(tk.Canvas):
         self.labelText = text
         self.itemconfig(self.label, text = self.labelText)
 
-class ButtonImage(tk.Canvas):
+class ImageButton(tk.Canvas):
     """
     A button made up of an image. There is a normal image and a clicked image. Has a hover effect.
 
@@ -1150,20 +1130,28 @@ class ButtonImage(tk.Canvas):
     enabled = True
     mouseOver = False
     
-    def __init__(self, image, pressedImage, width = 40, height = 40, command = None, commandArgs = None, **kw):
+    def __init__(self, image, pressedImage, text = "", width = 40, height = 40, textColor = (0, 0, 0), textFont = "Arial 14 bold", command = None, pressCommand = None, commandArgs = None, **kw):
         tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **kw)
         self.command = command
         self.commandArgs = commandArgs
+        self.pressCommand = pressCommand
         self.kw = kw
         self.width = width
         self.height = height
         self.image = PhotoImage(file = image)
-        self.resizeImage(self.width, self.height)
         self.pressedImage = PhotoImage(file = pressedImage)
+        self.resizeImage(self.width, self.height)
+        self.text = text
+        self.textColor = textColor
+        self.textFont = textFont
 
         # Create representation image
         self.img = GraphicsImage(self.width / 2, self.height / 2, self.image, canvas = self)
         self.img.draw()
+        
+        # Create text label in the center of the widget
+        self.label = Text(self.width / 2, self.height / 2, self.width, self.height, text = self.text, font = self.textFont, color = colorRGB(*self.textColor), canvas = self)
+        self.label.draw()
         
         # Bind actions
         self.bind("<ButtonPress-1>", self.onPress)
@@ -1184,6 +1172,8 @@ class ButtonImage(tk.Canvas):
         self.image = PhotoImage(file = image).zoom(x = self.imgWidth / self.width, y = self.imgHeight / self.height)
         self.img.image = self.image
         self.img.draw()
+        
+        self.lift(self.label)
 
     def setPressedImage(self, pressedImage):
         '''
@@ -1208,14 +1198,18 @@ class ButtonImage(tk.Canvas):
         self.hoverEffect = hoverEffect
     
     def resizeImage(self, x, y):
-        xDiv = int((self.width / x) * 10)
-        yDiv = int((self.height / y) * 10)
-        xDiv2 = int((x / self.width) * 10)
-        yDiv2 = int((y / self.height) * 10)
+        xDiv = int((x / self.image.width()) * 10)
+        yDiv = int((y / self.image.height()) * 10)
         
         self.image = self.image.zoom(xDiv, yDiv)
         self.image = self.image.subsample(10, 10)
-    
+        
+        xDiv = int((x / self.pressedImage.width()) * 10)
+        yDiv = int((y / self.pressedImage.height()) * 10)
+        
+        self.pressedImage = self.pressedImage.zoom(xDiv, yDiv)
+        self.pressedImage = self.pressedImage.subsample(10, 10)
+            
     def hoverEnter(self, event):
         self.mouseOver = True
         
@@ -1254,6 +1248,11 @@ class ButtonImage(tk.Canvas):
         self.img.setImage(self.pressedImage)        
         
         self.img.draw()
+        
+        self.lift(self.label)
+        
+        if self.pressCommand is not None:
+            self.pressCommand()
     
     def onRelease(self, event):
         if not self.enabled:
@@ -1271,7 +1270,9 @@ class ButtonImage(tk.Canvas):
         self.img.setImage(self.image)      
         
         self.img.draw()
-                
+        
+        self.lift(self.label)
+        
         if self.mouseOver:
             if self.command is not None:
                 if self.commandArgs is not None:
@@ -1289,6 +1290,7 @@ class ButtonImage(tk.Canvas):
         
         # Darken the background color
         # self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
+        self.lift(self.label)
     
     def enable(self):
         self.enabled = True
@@ -1297,6 +1299,7 @@ class ButtonImage(tk.Canvas):
         
         # Return the background color to normal
         # self.rect.color = colorRGB(*self.color)
+        self.lift(self.label)
     
     def isEnabled(self):
         return self.enabled
@@ -1406,11 +1409,10 @@ class TextBox(tk.Frame):
         executeOnType: Whether or not to execute the command function on every key press
         padding: Padding around the text box
         cornerRadius: Corner radius of the text box
-        inputType: Type of input. Can be 'text', 'int', or 'decimal'
         color: Color of the text box
         textColor: Color of the text
     '''
-    def __init__(self, width, height, text = "", command = None, commandArgs = None, executeOnType = True, padding = 5, cornerRadius = 10, inputType = 'text', color = (200, 200, 200), textColor = (0, 0, 0), invalidTextColor = (255, 20, 20), **kwargs):
+    def __init__(self, width, height, text = "", command = None, commandArgs = None, executeOnType = True, padding = 5, cornerRadius = 10, color = (200, 200, 200), textColor = (0, 0, 0), invalidTextColor = (255, 20, 20), **kwargs):
         self.textvariable = tk.StringVar()
         self.textvariable.set(text)
         
@@ -1419,7 +1421,6 @@ class TextBox(tk.Frame):
         self.command = command
         self.commandArgs = commandArgs
         self.executeOnType = executeOnType
-        self.inputType = inputType
         self.color = color
         self.textColor = textColor
         self.invalidTextColor = invalidTextColor
@@ -1537,32 +1538,13 @@ class TextBox(tk.Frame):
     def validateChar(self, newText):
         if not self.enabled:
             return False
+    
+        # Set text color to black
+        self.entry.config(foreground = colorRGB(*self.textColor))
+        self.validInput = True
         
-        if self.inputType == 'text':
-            # Set text color to black
-            self.entry.config(foreground = colorRGB(*self.textColor))
-            self.validInput = True
-            
-            if self.executeOnType:
-                self.submit(None, newText)
-        elif self.inputType == 'int' and isInt(newText):
-            # Set text color to black
-            self.entry.config(foreground = colorRGB(*self.textColor))
-            self.validInput = True
-            
-            if self.executeOnType:
-                self.submit(None, newText)
-        elif self.inputType == 'decimal' and isFloat(newText):
-            # Set text color to black
-            self.entry.config(foreground = colorRGB(*self.textColor))
-            self.validInput = True
-            
-            if self.executeOnType:
-                self.submit(None, newText)
-        else:
-            # Set text color to red
-            self.entry.config(foreground = colorRGB(*self.invalidTextColor))
-            self.validInput = False
+        if self.executeOnType:
+            self.submit(None, newText)
         
         return True
     
@@ -1583,9 +1565,9 @@ class TextBox(tk.Frame):
                 else:
                     self.command(self.text)
 
-            # Unfocus this entry if this wasn't called by typing
-            if not newText:
-                _root.focus()
+        # Unfocus this entry if this wasn't called by typing
+        if newText == None:
+            _root.focus()
     
     def setInputCallback(self, callback, *args):
         self.command = callback
@@ -1599,6 +1581,100 @@ class TextBox(tk.Frame):
     def text(self, text):
         self.textvariable.set(text)
 
+class FloatBox(TextBox):
+    '''
+    A text box where the user can type decimal numbers into.
+
+    Args:
+        width: Width of the text box
+        height: Height of the text box
+        text: The placeholder in the text box
+        command: A function to be called when the text is changed
+        commandArgs: Arguments to be passed to the command function
+        executeOnType: Whether or not to execute the command function on every key press
+        padding: Padding around the text box
+        cornerRadius: Corner radius of the text box
+        color: Color of the text box
+        textColor: Color of the text
+    '''
+    def __init__(self, width, height, initialValue = 0.0, command = None, commandArgs = None, executeOnType = True, padding = 5, cornerRadius = 10, color = (200, 200, 200), textColor = (0, 0, 0), invalidTextColor = (255, 20, 20), **kwargs):
+        super().__init__(width, height, str(initialValue), command, commandArgs, executeOnType, padding, cornerRadius, color, textColor, invalidTextColor, **kwargs)
+    
+    # Validate each character that gets typed
+    def validateChar(self, newText):
+        if not self.enabled:
+            return False
+        
+        if isFloat(newText):
+            # Set text color to black
+            self.entry.config(foreground = colorRGB(*self.textColor))
+            self.validInput = True
+            
+            if self.executeOnType:
+                self.submit(None, newText)
+        else:
+            # Set text color to red
+            self.entry.config(foreground = colorRGB(*self.invalidTextColor))
+            self.validInput = False
+        
+        return True
+    
+    @property
+    def value(self):
+        return float(self.text)
+    
+    @value.setter
+    def value(self, newVal):
+        self.text = str(newVal)
+
+class IntBox(TextBox):
+    '''
+    A text box where the user can type integer numbers into.
+
+    Args:
+        width: Width of the text box
+        height: Height of the text box
+        text: The placeholder in the text box
+        command: A function to be called when the text is changed
+        commandArgs: Arguments to be passed to the command function
+        executeOnType: Whether or not to execute the command function on every key press
+        padding: Padding around the text box
+        cornerRadius: Corner radius of the text box
+        color: Color of the text box
+        textColor: Color of the text
+    '''
+    def __init__(self, width, height, initialValue = 0, command = None, commandArgs = None, executeOnType = True, padding = 5, cornerRadius = 10, color = (200, 200, 200), textColor = (0, 0, 0), invalidTextColor = (255, 20, 20), **kwargs):        
+        super().__init__(width, height, str(initialValue), command, commandArgs, executeOnType, padding, cornerRadius, color, textColor, invalidTextColor, **kwargs)
+    
+    # Validate each character that gets typed
+    def validateChar(self, newText):
+        if not self.enabled:
+            return False
+        
+        if isInt(newText):
+            # Set text color to black
+            self.entry.config(foreground = colorRGB(*self.textColor))
+            self.validInput = True
+            
+            if self.executeOnType:
+                self.submit(None, newText)
+            
+        else:
+            # Set text color to red
+            self.entry.config(foreground = colorRGB(*self.invalidTextColor))
+            self.validInput = False
+        
+        return True
+    
+    @property
+    def value(self):
+        return int(self.text)
+    
+    @value.setter
+    def value(self, value):
+        self.text = str(value)
+
+#region Popups
 def showInfo(title = "Info", message = "", **kw):
     messagebox.showinfo(title, message, **kw)
 
@@ -1665,7 +1741,8 @@ def askFloat(title, prompt, **kw):
     
 def askString(title, prompt, **kw):
     return simpledialog.askstring(title, prompt, **kw)
-    
+#endregion
+
 class ScrollableText(scrolledtext.ScrolledText):
     def __init__(self, text = "", bg = 'white', height = 10, expand = True, editable = True, **kw):
         global _root, _pack_side
@@ -2018,19 +2095,20 @@ class Plot(tk.Canvas):
     clickUpFunc = None
     dragFunc = None
     
-    def __init__(self, width, height, imageHeight, imageWidth, background = 'white'):
+    def __init__(self, width, height, imageHeight = -1, imageWidth = -1, background = 'white'):
+        super().__init__(_root, width = width, height = height, bd = 0, highlightthickness = 0)
+        
         self.width = width
         self.height = height
-        self.imageHeight = imageHeight
-        self.imageWidth = imageWidth
+        self.imageWidth = self.width if imageWidth == -1 else imageWidth
+        self.imageHeight = self.height if imageHeight == -1 else imageHeight
         self.background = background
         
-        super().__init__(_root, width = self.width, height = self.height, bd = 0, highlightthickness = 0)
-            
+        # Create the tkinter image object
         self.imageP = PhotoImage(master = _root, width = self.imageWidth, height = self.imageHeight)
         
         # Set background color
-        self.imageP.put(background, to = (0, 0, self.imageWidth, self.imageHeight))
+        self.imageP.put(self.background, to = (0, 0, self.imageWidth, self.imageHeight))
         
         self.imageObj = self.create_image(0, 0, image = self.imageP, anchor = tk.NW)
         self.pack(side = _pack_side)
@@ -2114,12 +2192,9 @@ class Plot(tk.Canvas):
         
         self.imageP.put(rowColors, to = (x, y))
     
-    def reset(self):
-        self.fill(self.background, 0, 0, self.imageWidth, self.imageHeight)
-    
     def clear(self):
-        self.imageP.blank()
-    
+        self.imageP.put(self.background, to = (0, 0, self.imageWidth, self.imageHeight))
+        
     def saveImage(self, path):
         self.imageP.write(path, format = 'png')
     
@@ -2795,7 +2870,7 @@ class ColorWidget(Flow):
     '''
     A widget that displays a color, its name, and allows the user to change it
     '''
-    def __init__(self, name, color, colorChangeCommand, buttonLabelPrefix = "Edit ", width = 100, height = 30):
+    def __init__(self, width, height, color, name, colorChangeCommand = None, buttonLabelPrefix = "Edit "):
         super().__init__()
         
         self.name = name
@@ -2808,10 +2883,14 @@ class ColorWidget(Flow):
     def editColor(self):
         returned = openColorChooser(self.color)
         if returned != None:
-            self.color = colorToRGB(returned)
+            self.color = hexToRGB(returned)
             self.editButton.setColor(self.color)
             
-            self.colorChangeCommand(self.name, self.color)
+            if self.colorChangeCommand != None:
+                self.colorChangeCommand(self.name, self.color)
+    
+    def getColor(self):
+        return self.color
 
 #region Shape graphics stuff
 # Abstract Base
@@ -3881,6 +3960,21 @@ def colorToRGB(color):
     else:
         return ImageColor.getcolor(color, 'RGB')
 
+def hexToRGB(color):
+    """Convert hex color to RGB
+    Args:
+        color (str): hex color e.g. #ff00ff
+    Returns:
+        (3-tuple): tuple of format (r, g, b) e.g. it will return (255, 0, 0) for solid red
+    """
+
+    if color is None:
+        return None
+
+    if isinstance(color, str):
+        color = color.lstrip('#')
+        return tuple(int(color[i:i + 2], 16) for i in (0, 2, 4))
+
 def isColorDark(color):
     """rough check if color is dark or light
     Returns:
@@ -4277,7 +4371,7 @@ def centerWindow(window, width = None, height = None, set_geometry_wh = True, re
     else:
         window.eval('tk::PlaceWindow . center')
 
-def colorRGB(r,g,b):
+def colorRGB(r, g, b):
     '''r,g,b are intensities of r(ed), g(reen), and b(lue).
     Each value MUST be an integer in the interval [0,255]
     Returns color specifier string for the resulting color'''

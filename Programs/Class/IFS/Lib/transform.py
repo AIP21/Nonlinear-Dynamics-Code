@@ -24,10 +24,10 @@ from math import *
 
 class IFS_Transform:
 
-    def __init__(self, xScale = 0.5, yScale = 0.5,
+    def __init__(self, xScale = 0.0, yScale = 0.0,
                  theta = 0.0, phi = 0.0,
                  h = 0.0, k = 0.0,
-                 p = 1, c = 'white'):
+                 p = 1, c = (255, 0, 0)):
         # scaling and reflection
         self.r = xScale
         self.s = yScale
@@ -60,10 +60,10 @@ class IFS_Transform:
         self.phi = angle
         self.phiRadians = radians(self.phi)
 
-    def setHshift(self, shift):
+    def setH(self, shift):
         self.h = shift
 
-    def setVshift(self, shift):
+    def setK(self, shift):
         self.k = shift
 
     def setProb(self, prob):
