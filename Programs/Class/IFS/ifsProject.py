@@ -13,6 +13,8 @@ class IFSExplorer:
     
     WIDTH = 600
     HEIGHT = 750
+    PIX_WIDTH = 600 / 4
+    PIX_HEIGHT = 750 / 4
     
     PLOT_SIZE = 600
     
@@ -47,29 +49,26 @@ class IFSExplorer:
     def __init__(self):
         self.initImagesAndSounds(os.path.dirname(os.path.realpath(__file__)))
         
-        self.win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT, scale = 1) # 0.25
+        self.win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT, scale = 0.25)
         
         # self.win.hideTitlebar()
         self.win.update_idletasks()
         
-        self.pixelFont = Font(family = "Small Fonts", size = 70)
+        self.pixelFont = Font(family = "Small Fonts", size = 70, weight = NORMAL)
+        
+        self.win.setPrimaryFont(self.pixelFont)
         
         self.initializePixels()
         
         # Create the Controls Window
         self.createControlsWindow()
-        
-        self.win.geometry("%dx%d" % (self.WIDTH + 1, self.HEIGHT + 1))
-        self.win.update_idletasks()
-        self.win.geometry("%dx%d" % (self.WIDTH - 1, self.HEIGHT - 1))
-        self.win.update_idletasks()
-        
+                
         # UI stuff
         with self.win:
             with Stack():
                 # Create the canvas and plot for drawing the IFS                
-                with Canvas(width = self.PLOT_SIZE):
-                    self.plot = Plot(self.WIDTH, self.HEIGHT - 150)
+                with Canvas(width = self.PLOT_SIZE / 4):
+                    self.plot = Plot(self.PIX_WIDTH, (self.HEIGHT - 150) / 4, self.WIDTH, self.HEIGHT)
                 
                 # Create the IFS Config Panel
                 self.createIFSControlPanel()
@@ -82,15 +81,15 @@ class IFSExplorer:
     def createIFSControlPanel(self):
         with Flow():            
             with Stack(width = 15):
-                newButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 30, height = 30, command = self.newTransform, pressCommand = self.clickDown)
+                newButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
                 
-                removeButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 30, height = 30, command = self.newTransform, pressCommand = self.clickDown)
+                removeButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
 
-                saveButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 30, height = 30, command = self.newTransform, pressCommand = self.clickDown)
+                saveButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
                 
-                loadButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 30, height = 30, command = self.newTransform, pressCommand = self.clickDown)
+                loadButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
                 
-                clearButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 30, height = 30, command = self.newTransform, pressCommand = self.clickDown)
+                clearButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
             
             separator = Separator(width = 1, height = 100, horizontalSpacing = 5, verticalSpacing = 0)
             
@@ -243,8 +242,6 @@ class IFSExplorer:
             
         print("Loaded " + str(len(self.UI_IMAGES)) + " images")
         print("Loaded " + str(len(self.UI_SOUNDS)) + " sounds")
-        
-        print(self.UI_SOUNDS)
     
     # Get an image path by name
     def getImage(self, name):
@@ -283,7 +280,7 @@ class TransformGUI(Stack):
     
     def initUI(self):
         with self:
-            Label("Transform: " + str(self.index + 1))
+            Label("Transform: " + str(self.index + 1), font = ("Small Fonts", 48, BOLD))
             
             with Flow():
                 self.rInput = FloatBox(50, 20, self.transform.getR())

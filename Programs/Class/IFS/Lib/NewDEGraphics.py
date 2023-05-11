@@ -26,6 +26,7 @@ try: # python 3
     from tkinter import PhotoImage
     from tkinter import TclError
     from tkinter import colorchooser
+    from tkinter.font import Font
 
     try:
         from PIL import Image as PImage, ImageTk, ImageColor, ImageDraw, ImageFilter
@@ -108,6 +109,10 @@ except ImportError: # python 2
     from Tkinter import TRUE
     from Tkinter import FALSE
 
+NORMAL = 'normal'
+BOLD = 'bold'
+_primaryFont = None
+
 _root = None
 _pack_side = None
 _canvas = None
@@ -166,6 +171,9 @@ class DEGraphWin(tk.Tk):
         self.edgePadding = edgePadding
         self.debugMode = debugMode
         
+        global _primaryFont
+        _primaryFont = Font(family = "Helvetica", size = 12, weight = NORMAL)
+        
         # Set close protocol (x button on window top bar)
         self.protocol("WM_DELETE_WINDOW", self.close)
         
@@ -198,6 +206,10 @@ class DEGraphWin(tk.Tk):
     def setScale(self, newScale):
         self.scale = newScale
         self.call('tk', 'scaling', self.scale)
+    
+    def setPrimaryFont(self, font):
+        global _primaryFont
+        _primaryFont = font
 
     def close(self):
         self.destroy()
@@ -753,10 +765,10 @@ class HideableFrame(Slot):
     hidden = False
     showHideButton = None
     
-    def __init__(self, titleText = "", titleFont = "", align = "top", depth = 0, **kw):
+    def __init__(self, titleText = "", titleFont = ("PRIMARY", 12, BOLD), align = "top", depth = 0, **kw):
         self.kw = kw
         self.titleText = titleText
-        self.titleFont = titleFont if titleFont != "" else "Arial 12 bold"
+        self.titleFont = getPrimaryFont(titleFont)
         self.align = align
         self.depth = depth
     
@@ -875,7 +887,6 @@ class HorizontalScrollView(Flow):
         
         self.canvas.bind_all("<MouseWheel>", onMouseWheel)
 
-
 class VerticalScrollView(Flow):
     """
     A frame that you can scroll through vertically
@@ -932,7 +943,7 @@ class Button(tk.Canvas):
     enabled = True
     mouseOver = False
     
-    def __init__(self, text, width = 120, height = 40, cornerRadius = 10, padding = 6, color = (200, 200, 200), backgroundColor = (240, 240, 240), textColor = (0, 0, 0), textFont = "Arial 10 bold", command = None, commandArgs = None, **kw):
+    def __init__(self, text, width = 120, height = 40, cornerRadius = 10, padding = 6, color = (200, 200, 200), backgroundColor = (240, 240, 240), textColor = (0, 0, 0), textFont = ("PRIMARY", 12, BOLD), command = None, commandArgs = None, **kw):
         tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, bg = colorRGB(*backgroundColor), relief = "flat", highlightthickness = 0, **kw)
         self.command = command
         self.commandArgs = commandArgs
@@ -942,6 +953,7 @@ class Button(tk.Canvas):
         self.width = width
         self.height = height
         self.padding = padding
+        self.textFont = getPrimaryFont(textFont)
 
         # Create background rounded rectangle
         self.rect = RoundedRectangle(padding, padding, width - padding * 2, height - padding * 2, cornerRadius, color = colorRGB(*self.color), canvas = self)
@@ -949,7 +961,7 @@ class Button(tk.Canvas):
         
         # Create the text label
         self.labelText = text
-        self.label = self.create_text(width / 2, height / 2, width = width - (padding + 5) * 2, text = self.labelText, fill = colorRGB(*self.textColor), font = textFont)
+        self.label = self.create_text(width / 2, height / 2, width = width - (padding + 5) * 2, text = self.labelText, fill = colorRGB(*self.textColor), font = self.textFont)
         
         # Bind actions
         self.bind("<ButtonPress-1>", self.onPress)
@@ -1130,7 +1142,7 @@ class ImageButton(tk.Canvas):
     enabled = True
     mouseOver = False
     
-    def __init__(self, image, pressedImage, text = "", width = 40, height = 40, textColor = (0, 0, 0), textFont = "Arial 14 bold", command = None, pressCommand = None, commandArgs = None, **kw):
+    def __init__(self, image, pressedImage, text = "", width = 40, height = 40, textColor = (0, 0, 0), textFont = ("PRIMARY", 14, BOLD), command = None, pressCommand = None, commandArgs = None, **kw):
         tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **kw)
         self.command = command
         self.commandArgs = commandArgs
@@ -1144,7 +1156,7 @@ class ImageButton(tk.Canvas):
         self.text = text
         self.textColor = textColor
         self.textFont = textFont
-
+        
         # Create representation image
         self.img = GraphicsImage(self.width / 2, self.height / 2, self.image, canvas = self)
         self.img.draw()
@@ -1321,8 +1333,10 @@ class Label(tk.Label):
         padx, pady, relief, takefocus, text,
         textvariable, underline, wraplength)
     '''
-    def __init__(self, text, color = "black", font = "Arial 10", **kw):
+    def __init__(self, text, color = "black", font = ("PRIMARY", 10, NORMAL), **kw):
         self.kw   = kw
+        self.font = getPrimaryFont(font)
+        
         if type(text) == str:
             self.textvariable = tk.StringVar()
             self.textvariable.set(text)
@@ -2401,7 +2415,7 @@ class ProgressBar(tk.Canvas):
     A progress bar that shows the value in a range
     '''
     
-    def __init__(self, start, end, value, width, height, suffix = "", padding = 10, cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = "Arial 8 bold", labelColor = (255, 255, 255), **args):
+    def __init__(self, start, end, value, width, height, suffix = "", padding = 10, cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), labelFont = ("PRIMARY", 8, BOLD), labelColor = (255, 255, 255), **args):
         tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **args)
         self.start = start
         self.end = end
@@ -2412,7 +2426,7 @@ class ProgressBar(tk.Canvas):
         self.color = color
         self.backgroundColor = backgroundColor
         self.labelColor = labelColor
-        self.labelFont = labelFont
+        self.labelFont = getPrimaryFont(labelFont)
         self.cornerRadius = cornerRadius
         self.suffix = suffix
         
@@ -2464,7 +2478,7 @@ class Slider(tk.Canvas):
     mouseOver = False
     dragging = False
     
-    def __init__(self, start, end, value, width, height, step = 0, command = None, labelText = "", suffix = "", padding = [20, 10], cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), thumbColor = (200, 200, 255), labelFont = "Arial 8 bold", labelColor = (255, 255, 255), labelWidth = 100, **args):
+    def __init__(self, start, end, value, width, height, step = 0, command = None, labelText = "", suffix = "", padding = [20, 10], cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), thumbColor = (200, 200, 255), labelFont = ("PRIMARY", 8, BOLD), labelColor = (255, 255, 255), labelWidth = 100, **args):
         tk.Canvas.__init__(self, _root, width = width, height = height, borderwidth = 0, relief = "flat", highlightthickness = 0, **args)
         self.start = start
         self.end = end
@@ -2486,7 +2500,7 @@ class Slider(tk.Canvas):
         actualLabelWidth = self.labelWidth - 10
                 
         # Create the label
-        self.label = Text(padding[0] + actualLabelWidth / 2, self.height / 2, width = self.labelWidth, height = self.height - (padding[1] * 2), justify = 'right', text = labelText, font = "Arial 12", canvas = self)
+        self.label = Text(padding[0] + actualLabelWidth / 2, self.height / 2, width = self.labelWidth, height = self.height - (padding[1] * 2), justify = 'right', text = labelText, font = self.labelFont, canvas = self)
         self.label.draw()
                 
         # Local pixel minimum and maximum
@@ -2693,8 +2707,10 @@ class SliderWithTextInput(Flow):
     '''
         A slider with a text input.
     '''
-    def __init__(self, start, end, value, width, height, step = 0, command = None, entryWidth = 70, labelText = "", suffix = "", padding = [20, 10], cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), thumbColor = (200, 200, 255), labelFont = "Arial 8 bold", labelColor = (255, 255, 255), labelWidth = 100, **kwargs):
+    def __init__(self, start, end, value, width, height, step = 0, command = None, entryWidth = 70, labelText = "", suffix = "", padding = [20, 10], cornerRadius = 20, color = (150, 150, 250), backgroundColor = (100, 100, 100), thumbColor = (200, 200, 255), labelFont = ("PRIMARY", 10, BOLD), labelColor = (255, 255, 255), labelWidth = 100, **kwargs):
         super().__init__()
+        
+        self.labelFont = getPrimaryFont(labelFont)
         
         self.command = command
         
@@ -2870,15 +2886,16 @@ class ColorWidget(Flow):
     '''
     A widget that displays a color, its name, and allows the user to change it
     '''
-    def __init__(self, width, height, color, name, colorChangeCommand = None, buttonLabelPrefix = "Edit "):
+    def __init__(self, width, height, color, name, colorChangeCommand = None, buttonLabelPrefix = "Edit ", labelFont = ("PRIMARY", 12, BOLD)):
         super().__init__()
         
         self.name = name
         self.color = color
         self.colorChangeCommand = colorChangeCommand
+        self.labelFont = labelFont
         
         with self:
-            self.editButton = Button(buttonLabelPrefix + name, width, height, color = color, textFont = "Arial 12", command = self.editColor)
+            self.editButton = Button(buttonLabelPrefix + name, width, height, color = color, textFont = self.labelFont, command = self.editColor)
     
     def editColor(self):
         returned = openColorChooser(self.color)
@@ -3066,13 +3083,13 @@ class Text(GraphicsObject):
     
     Justify can be: left, center, right
     '''
-    def __init__(self, x, y, width, height, text, color = 'black', justify = 'center', font = "Arial 10", outline = None, shouldPanZoom = False, canvas = None):
+    def __init__(self, x, y, width, height, text, color = 'black', justify = 'center', font = ("PRIMARY", 10, NORMAL), outline = None, shouldPanZoom = False, canvas = None):
         super().__init__(x, y, color, outline, shouldPanZoom, canvas)
         self.width = width
         self.height = height
         self.text = text
         self.justify = justify
-        self.font = font
+        self.font = getPrimaryFont(font)
 
     def _draw(self, drawX, drawY, drawScale):
         self.id = self.canvas.create_text(drawX, drawY, width = self.width, text = self.text, justify = self.justify, font = self.font, outline = self.outline, fill = self.color)
@@ -4405,6 +4422,29 @@ def gaussian(x, a, b, c, d = 0):
 def getGradientColor(val, gradient):
     col = gradient[int(max(0, min(1, val)) * (len(gradient) - 1))]
     return (col[0] * 255, col[1] * 255, col[2] * 255)
+
+'''
+Get a font. If name is "PRIMARY" is provided for any value, uses the value from the DEGraphWin primary font
+
+format: Must be (Name, Size, Weight)
+'''
+def getPrimaryFont(form):
+    fontFamily = form[0]
+    fontSize = form[1]
+    fontWeight = form[2]
+    
+    copy = _primaryFont.copy()
+    
+    if fontFamily != "PRIMARY":
+        copy.configure(family = fontFamily)
+    
+    if fontSize != "PRIMARY":
+        copy.configure(size = fontSize)
+    
+    if fontWeight != "PRIMARY":
+        copy.configure(weight = fontWeight)
+    
+    return copy
 
 # https://en.wikipedia.org/wiki/Fast_inverse_square_root
 def fastInverseSqrt(number):
