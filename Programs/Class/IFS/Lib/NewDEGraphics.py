@@ -864,30 +864,49 @@ class HideableFrame(Slot):
         _root = self._root_old
         _pack_side = self._pack_side_old
 
-class HorizontalScrollView(Flow):
+class ScrollView(Layout):
     """
-    A frame that you can scroll through horizontally
+    A frame that you can scroll through.
+    
+    Direction: The direction of the scroll. Can be 'x' or 'y'
     
     Usage:
         with ScrollView():
             # add your widgets here
     """
     
-    def __init__(self, **kw):
-        Flow.__init__(self, **kw)
+    direction = 'x'
+    
+    def __init__(self, direction = 'y', **kw):
+        _align = TOP if direction == 'y' else LEFT if direction == 'x' else None
+        Layout.__init__(self, align = _align, **kw)
         
-        # self.canvas.bind("<MouseWheel>", self.onMouseWheel)
+        self.direction = direction
+        
+    def onMouseWheel(self, event):
+        if self.direction == 'y':
+            self.canvas.yview_scroll(int(-1 * event.delta), 'units')
+        elif self.direction == 'x':
+            self.canvas.xview_scroll(int(-1 * event.delta), 'units')
     
     def __enter__(self):
         super().__enter__()
-    
-        def onMouseWheel(event):
-            print(event.delta)
-            self.canvas.xview_scroll(int(-1 * event.delta), 'units')
         
-        self.canvas.bind_all("<MouseWheel>", onMouseWheel)
+        self.canvas.bind_all("<MouseWheel>", self.onMouseWheel)
 
-class VerticalScrollView(Flow):
+class HorizontalScrollView(ScrollView):
+    """
+    A frame that you can scroll through horizontally
+    
+    Usage:
+        with HorizontalScrollView():
+            # add your widgets here
+    """
+    
+    def __init__(self, **kw):
+        ScrollView.__init__(self, 'x', **kw)
+
+class VerticalScrollView(ScrollView):
     """
     A frame that you can scroll through vertically
     
@@ -897,18 +916,7 @@ class VerticalScrollView(Flow):
     """
     
     def __init__(self, **kw):
-        Flow.__init__(self, **kw)
-        
-        # self.canvas.bind("<MouseWheel>", self.onMouseWheel)
-    
-    def __enter__(self):
-        super().__enter__()
-    
-        def onMouseWheel(event):
-            print(event.delta)
-            self.canvas.yview_scroll(int(-1 * event.delta), 'units')
-        
-        self.canvas.bind_all("<MouseWheel>", onMouseWheel)
+        ScrollView.__init__(self, 'y', **kw)
 
 class Separator(tk.Canvas):
     def __init__(self, width, height, horizontalSpacing, verticalSpacing, color = (100, 100, 100), **kw):

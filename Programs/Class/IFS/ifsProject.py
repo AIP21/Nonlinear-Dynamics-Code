@@ -19,21 +19,27 @@ class IFSExplorer:
     PLOT_SIZE = 600
     
     transforms = []
+    MAX_TRANSFORMS = 10
+    currTransformIndex = 0
     pixelFont = None
     
     initialTransforms = []
-    initialTransforms.append(IFS_Transform(xScale = 0.5, yScale = 0.5,
-                                    theta = 0.0, phi = 0.0,
+    initialTransforms.append(IFS_Transform(xScale = 1/3, yScale = 1/3,
+                                    theta = -14, phi = -14,
                                     h = 0.0, k = 0.0,
                                     p = 1, c = (255, 0, 0)))
-    # initialTransforms.append(IFS_Transform(xScale = 0.5, yScale = 0.5,
-    #                                 theta = 0.0, phi = 0.0,
-    #                                 h = 0.5, k = 0.0,
-    #                                 p = 1, c = (0, 255 ,0)))
-    # initialTransforms.append(IFS_Transform(xScale = 0.5, yScale = 0.5,
-    #                                 theta = 0.0, phi = 0.0,
-    #                                 h = 0.0, k = 0.5, # h = 0.25 ???
-    #                                 p = 1, c = (0, 0, 255)))
+    initialTransforms.append(IFS_Transform(xScale = 4.5/12, yScale = 4.5/12,
+                                    theta = 48, phi = 48,
+                                    h = 0.0, k = 2/12,
+                                    p = 1, c = (0, 255 ,0)))
+    initialTransforms.append(IFS_Transform(xScale = 1/100, yScale = 1/6,
+                                    theta = 0.0, phi = 0.0,
+                                    h = 0.0, k = 0.5/12, # h = 0.25 ???
+                                    p = 1, c = (0, 0, 255)))
+    initialTransforms.append(IFS_Transform(xScale = 10/12, yScale = 10/12, # Stem
+                                    theta = 0.0, phi = 0.0,
+                                    h = 0.0, k = 2/12, # h = 0.25 ???
+                                    p = 1, c = (0, 0, 255)))
     
     pixels = []
 
@@ -68,10 +74,10 @@ class IFSExplorer:
             with Stack():
                 # Create the canvas and plot for drawing the IFS                
                 with Canvas(width = self.PLOT_SIZE / 4):
-                    self.plot = Plot(self.PIX_WIDTH, (self.HEIGHT - 150) / 4, self.WIDTH, self.HEIGHT)
+                    self.plot = Plot(self.WIDTH, self.HEIGHT, self.WIDTH, self.HEIGHT)
                 
                 # Create the IFS Config Panel
-                self.createIFSControlPanel()
+                # self.createIFSControlPanel()
                 
                 # Plot the IFS
                 self.plotIFS()
@@ -83,20 +89,26 @@ class IFSExplorer:
             with Stack(width = 15):
                 newButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
                 
-                removeButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
-
-                saveButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
+                saveButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.saveTransforms, pressCommand = self.clickDown)
                 
-                loadButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
+                loadButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.loadTransforms, pressCommand = self.clickDown)
                 
-                clearButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
+                clearButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.clearTransforms, pressCommand = self.clickDown)
             
             separator = Separator(width = 1, height = 100, horizontalSpacing = 5, verticalSpacing = 0)
             
             self.transformsScrollArea = HorizontalScrollView(width = self.WIDTH - 15)
             with self.transformsScrollArea:
+                # for i in range(len(self.MAX_TRANSFORMS)):
+                #     gui = TransformGUI(0, None, self.plotIFS)
+                #     gui.forget()
+                #     self.transforms.append(gui)
+                
                 for i in range(len(self.initialTransforms)):
+                    # self.transforms[i].setTransform(self.initialTransforms[i])
                     self.transforms.append(TransformGUI(i, self.initialTransforms[i], self.plotIFS))
+                    
+                    # // TODO: SET UP POOL
     
     # Create the controls window
     def createControlsWindow(self):
@@ -114,13 +126,11 @@ class IFSExplorer:
     
     #region Transform management
     def clearTransforms(self):
-        self.transforms = []
+        for gui in self.transforms:
+            gui.forget()
     
     def newTransform(self):
         self.clickUp()
-        
-        with self.transformsScrollArea:
-            self.transforms.append(TransformGUI(len(self.transforms), IFS_Transform(), self.plotIFS))
     
     def removeTransform(self, index):
         self.transforms.pop(index)
@@ -128,14 +138,11 @@ class IFSExplorer:
         for i in range(len(self.transforms)):
             self.transforms[i].index = i
     
-    def getTransforms(self):
-        return self.transforms
-    
-    def saveToJSON(self):
-        print("saveToJSON: NOT YET IMPLEMENTED")
+    def saveTransforms(self):
+        print("saveTransforms: NOT YET IMPLEMENTED")
         
-    def loadToJSON(self):
-        print("loadToJSON: NOT YET IMPLEMENTED")
+    def loadTransforms(self):
+        print("loadTransforms: NOT YET IMPLEMENTED")
     #endregion
     
     #region Sounds
@@ -174,7 +181,7 @@ class IFSExplorer:
     # Iterate the IFS system
     def iterate(self, shouldPlot):
         # Choose a random transformation for this iteration
-        randTransform = self.transforms[random.randint(0, len(self.transforms) - 1)]
+        randTransform = self.initialTransforms[random.randint(0, len(self.initialTransforms) - 1)]
         
         # Transform the current point and keep it as a new point
         newPt = randTransform.transformPoint(self.point[0], self.point[1])
@@ -184,8 +191,11 @@ class IFSExplorer:
             # Remap the new point to be within the screen
             remappedPt = self.remapPoint(newPt)
 
+            _x = min(self.PLOT_SIZE - 1, max(0, remappedPt[0]))
+            _y = min(self.PLOT_SIZE - 1, max(0, remappedPt[1]))
+            
             # Set the pixel at this screen position to the color of the transformation
-            self.pixels[remappedPt[0]][remappedPt[1]] = colorRGB(*randTransform.color())
+            self.pixels[_x][_y] = colorRGB(*randTransform.color)
         else: # If not, just update the min/max values
             if newPt[0] < self.minX:
                 self.minX = newPt[0]
@@ -201,7 +211,7 @@ class IFSExplorer:
     
     # Remap the point to stay within the screen size and within the border padding
     def remapPoint(self, point):
-        return (int(lerp(self.drawPadding[0], self.PLOT_SIZE - self.drawPadding[0], point[0])), self.PLOT_SIZE - 1 - int(lerp(self.drawPadding[0], self.PLOT_SIZE - self.drawPadding[0], point[1])))
+        return (int(lerp(self.drawPadding[0], self.WIDTH - self.drawPadding[0], point[0])), self.HEIGHT - 1 - int(lerp(self.drawPadding[0], self.HEIGHT - self.drawPadding[0], point[1])))
 
     # Initialize the pixels array
     def initializePixels(self):
@@ -303,6 +313,9 @@ class TransformGUI(Stack):
         print("After update " + str(self.transform))
         
         self.plotCallback()
+    
+    def setTransform(self, trans):
+        self.transform = trans
     
     def transformPoint(self, x, y):
         return self.transform.transformPoint(x, y)

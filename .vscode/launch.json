@@ -6,6 +6,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "Tree",
+            "request": "launch",
+            "mainClass": "Tree",
+            "projectName": "AT Nonlinear Dynamics_a6c357d0"
+        },
+        {
+            "type": "java",
             "name": "Launch ProgrammingChallenge",
             "request": "launch",
             "mainClass": "ProgrammingChallenge",
