@@ -14,8 +14,8 @@ class IFSExplorer:
     UI_SCALING = 0.25
     WIDTH = 600
     HEIGHT = 850
-    PIX_WIDTH = 600 #int(600 * UI_SCALING)
-    PIX_HEIGHT = 600 #int(600 * UI_SCALING)
+    PIX_WIDTH = 600 // 4 #int(600 * UI_SCALING)
+    PIX_HEIGHT = 600 // 4#int(600 * UI_SCALING)
         
     MAX_TRANSFORMS = 10
     transforms = []
@@ -100,7 +100,7 @@ class IFSExplorer:
                     img.resizeImage(self.WIDTH, self.PIX_HEIGHT)
                     img.draw()
                     
-                    self.plot = Plot(self.WIDTH - 40, self.PIX_HEIGHT - 40, self.WIDTH, self.PIX_HEIGHT)
+                    self.plot = Plot(self.WIDTH - 40, self.PIX_HEIGHT - 40, self.PIX_WIDTH, self.PIX_HEIGHT)
                 
                 # Create the IFS Config Panel
                 self.createIFSControlPanel()
@@ -342,7 +342,6 @@ class TransformGUI(Canvas):
             img.draw()
             
             self.initUI(transform)
-            
     
     def initUI(self, transform):
         if transform == None:

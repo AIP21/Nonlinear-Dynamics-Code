@@ -2043,7 +2043,7 @@ class Image(tk.Canvas):
     Supported image file formats: PGM, PPM, GIF, and PNG
     '''
     
-    def __init__(self, width, height, path = None, image = None, resizeImage = True, resizeKeepAspectRatio = True, imageWidth = None, imageHeight = None):
+    def __init__(self, width, height, path = None, image = None, resize = True, imageWidth = -1, imageHeight = -1):
         '''
         Args:
             path: Path to the image
@@ -2057,8 +2057,8 @@ class Image(tk.Canvas):
         
         self.width = width
         self.height = height
-        self.imgWidth = imageWidth or self.width
-        self.imgHeight = imageHeight or self.height
+        self.imgWidth = imageWidth if imageWidth != -1 else self.width
+        self.imgHeight = imageHeight if imageHeight != -1 else self.height
         self.image = None
         
         super().__init__(_root, width = width, height = height, bd = 0, highlightthickness = 0)
@@ -2068,40 +2068,33 @@ class Image(tk.Canvas):
                 
         # Set the image
         if image:            
-            self.setImage(image, resizeImage, resizeKeepAspectRatio)
+            self.setImage(image, resize)
         elif path:
-            self.setPath(path)
+            self.setPath(path, resize)
         
         self.pack(side = _pack_side)
     
-    def setImage(self, image, resize = True, resizeKeepAspectRatio = True):
+    def setImage(self, image, resize):
         '''
-        Set the image of this Image object to a PIL image object
-        
-        REQUIRES PIL TO BE INSTALLED
-        
+        Set the image of this Image object to a PhotoImage image object
+                
         Args:
             image: The image to set
             resize: Whether or not to resize the image to the size of this widget or the size specified in the constructor
             resizeKeepAspectRatio: Whether or not to keep the aspect ratio of the image when resizing
         '''
         
-        if hasPIL:
-            if resize:
-                img = resizeImage(image, size = (self.imgWidth, self.imgHeight), keep_aspect_ratio = resizeKeepAspectRatio)
-            else:
-                img = image
-
-            self.img = ImageTK.PhotoImage(master = _root, image = img, width = self.width, height = self.height)
-            
-            if self.imageObj == None:
-                self.imageObj = self.create_image(0, 0, image = self.img, anchor = tk.NW)
-            else:
-                self.itemconfig(self.imageObj, image = self.img)
+        self.img = image
+        
+        if resize:
+            self.resizeImage(self.imgWidth, self.imgHeight)
+        
+        if self.imageObj == None:
+            self.imageObj = self.create_image(0, 0, image = self.img, anchor = tk.NW)
         else:
-            print("PIL not installed. Cannot set image from image object")
+            self.itemconfig(self.imageObj, image = self.img)
     
-    def setPath(self, path):
+    def setPath(self, path, resize):
         '''
         Set the image of this Image object to a file path
         
@@ -2111,16 +2104,26 @@ class Image(tk.Canvas):
             path: The path to the image to set
         '''
         
-        if ".jpg" in path:
+        if ".jpg" in path or ".jpeg" in path:
             print("WARNING: JPG images are not supported. Use PNG or GIF instead")
             return
     
-        self.img = tk.PhotoImage(master = _root, width = self.width, height = self.height, file = path)
+        self.img = PhotoImage(file = path)
+        
+        if resize:
+            self.resizeImage(self.imgWidth, self.imgHeight)
         
         if self.imageObj == None:
             self.imageObj = self.create_image(0, 0, image = self.img, anchor = tk.NW)
         else:
             self.itemconfig(self.imageObj, image = self.img)
+    
+    def resizeImage(self, x, y):
+        xDiv = int((x / self.img.width()) * 10)
+        yDiv = int((y / self.img.height()) * 10)
+        
+        self.img = self.img.zoom(xDiv, yDiv)
+        self.img = self.img.subsample(10, 10)
     
     def setOnClick(self, func):
         '''
@@ -2167,13 +2170,21 @@ class Plot(tk.Canvas):
         self.imageHeight = self.height if imageHeight == -1 else imageHeight
         self.background = background
         
+        # Create the tkinter background image object
+        self.bgImg = PhotoImage(master = _root, width = self.width, height = self.height)
+        self.bgImg.put(self.background, to = (0, 0, self.width, self.height))
+        self.backgroundObj = GraphicsImage(0, 0, self.bgImg, canvas = self) #self.create_image(0, 0, image = self.bgImg, anchor = tk.NW)
+        
         # Create the tkinter image object
         self.imageP = PhotoImage(master = _root, width = self.imageWidth, height = self.imageHeight)
         
         # Set background color
         self.imageP.put(self.background, to = (0, 0, self.imageWidth, self.imageHeight))
+        self.resizeImage(self.imageWidth, self.imageHeight)
         
-        self.imageObj = self.create_image(0, 0, image = self.imageP, anchor = tk.NW)
+        self.imageObj = GraphicsImage(0, 0, self.imageP, canvas = self)
+        self.imageObj.draw()
+        
         self.pack(side = _pack_side)
         
         self.bind("<B1-Motion>", self.dragClick)
