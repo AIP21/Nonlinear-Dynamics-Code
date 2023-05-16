@@ -498,18 +498,23 @@ class Canvas(tk.Canvas):
     
     interactionCallback = None
     
-    def __init__(self, widgetAlignment = 'top', **kw):
+    def __init__(self, widgetAlignment = 'top', width = 100, height = 100, **kw):
         self.kw = kw
+        self.width = width
+        self.height = height
         self.widgetAlignment = widgetAlignment
         
     def __enter__(self):
         global _root, _pack_side, _canvas
         self._rootOld = _root
         self._canvasOld = _canvas
+        self._pack_sideOld = _pack_side
         
-        tk.Canvas.__init__(self, _root, bd = 0, highlightthickness = 0, borderwidth = 0, **self.kw)
-        self.pack(side = _pack_side, fill = 'both', expand = True)
+        tk.Canvas.__init__(self, _root, bd = 0, highlightthickness = 0, borderwidth = 0, width = self.width, height = self.height, **self.kw)
+        self.pack(side = _pack_side, fill = 'both', expand = False)
         # self.canvas.pack()
+        
+        _pack_side = self.widgetAlignment
         _canvas = self
         _root = self
         
@@ -522,9 +527,10 @@ class Canvas(tk.Canvas):
         self.bind("<MouseWheel>", self.onMouseWheel)
     
     def __exit__(self, type, value, traceback):
-        global _root, _canvas
+        global _root, _canvas, _pack_side
         _root = self._rootOld
         _canvas = self._canvasOld
+        _pack_side = self._pack_sideOld
     
     def onMouseWheel(self, event):
         if not self.dragging:
@@ -667,13 +673,14 @@ class Canvas(tk.Canvas):
 class Slot(tk.Frame):
     def __init__(self, **kw):
         self.kw = kw
-        
+    
     def __enter__(self):
         global _root, _pack_side
         self._root_old = _root
         self._pack_side_old = _pack_side
         tk.Frame.__init__(self, self._root_old, **self.kw)
-        self.canvas = tk.Canvas(self, bd = 0, highlightthickness = 0, borderwidth = 0)
+        # self.canvas = tk.Canvas(self, bd = 0, highlightthickness = 0, borderwidth = 0)
+        
         self.pack(side = self._pack_side_old, fill = 'both')
         _root = self
     
@@ -716,7 +723,7 @@ class Stack(Slot):
     def __init__(self, **kw):
         Slot.__init__(self, **kw)
 
-    def __enter__(self):
+    def __enter__(self):        
         global _pack_side
         Slot.__enter__(self)
         _pack_side = TOP
@@ -864,7 +871,7 @@ class HideableFrame(Slot):
         _root = self._root_old
         _pack_side = self._pack_side_old
 
-class ScrollView(Layout):
+class ScrollView(tk.Frame):
     """
     A frame that you can scroll through.
     
@@ -876,23 +883,55 @@ class ScrollView(Layout):
     """
     
     direction = 'x'
-    
+
     def __init__(self, direction = 'y', **kw):
-        _align = TOP if direction == 'y' else LEFT if direction == 'x' else None
-        Layout.__init__(self, align = _align, **kw)
-        
         self.direction = direction
-        
-    def onMouseWheel(self, event):
-        if self.direction == 'y':
-            self.canvas.yview_scroll(int(-1 * event.delta), 'units')
-        elif self.direction == 'x':
-            self.canvas.xview_scroll(int(-1 * event.delta), 'units')
-    
-    def __enter__(self):
-        super().__enter__()
-        
+        self._widgets = []
+
+        self.packSide = tk.LEFT if self.direction == 'x' else tk.TOP if self.direction == 'y' else None
+        canvasPackSide = tk.TOP if self.direction == 'x' else tk.LEFT if self.direction == 'y' else None
+        scrollbarPackSide = tk.BOTTOM if self.direction == 'x' else tk.RIGHT if self.direction == 'y' else None
+        orient = tk.VERTICAL if self.direction == 'y' else tk.HORIZONTAL if self.direction == 'x' else None
+
+        global _root
+
+        super().__init__(_root, **kw)
+
+        self.canvas = tk.Canvas(self)
+
+        # self.scrollbar = tk.Scrollbar(self, orient = orient, command = self.canvas.yview if self.direction == 'y' else self.canvas.xview)
+        # self.canvas.configure(yscrollcommand = self.scrollbar.set)
+        # self.scrollbar.pack(side = scrollbarPackSide, fill = self.direction)
+
+        self.scrollable_frame = tk.Frame(self.canvas)
+        self.canvas.create_window((0, 0), window = self.scrollable_frame, anchor = "nw")
+
+        self.canvas.pack(side = canvasPackSide, fill = "both", expand = True)
+
         self.canvas.bind_all("<MouseWheel>", self.onMouseWheel)
+
+        self.pack(side = canvasPackSide, fill = tk.BOTH, expand = True)
+
+        self.canvas.config(scrollregion = self.canvas.bbox("all"))
+        
+    def add_widget(self, widget):
+        self._widgets.append(widget)
+        widget.pack_forget()
+        widget.pack(in_ = self.scrollable_frame, side = self.packSide, fill = self.direction, expand = False, padx = 5)
+        
+        self.canvas.config(scrollregion = self.canvas.bbox("all"))
+        
+    def remove_widget(self, widget):
+        self._widgets.remove(widget)
+        widget.pack_forget()
+        
+        self.canvas.config(scrollregion = self.canvas.bbox("all"))
+
+    def onMouseWheel(self, event):        
+        if self.direction == 'y':
+            self.canvas.yview_scroll(int(-1 * event.delta / 120), 'units')
+        elif self.direction == 'x':
+            self.canvas.xview_scroll(int(-1 * event.delta / 120), 'units')
 
 class HorizontalScrollView(ScrollView):
     """
@@ -1380,6 +1419,7 @@ class Message(tk.Message): # ??? I forget what this does...
     def text(self, text):
         self.textvariable.set(text)
 
+#region Random things for animations
 class repeat(threading.Thread):
     def __init__(self, interval = 1):
         global _events
@@ -1412,6 +1452,7 @@ class loop(threading.Thread):
     def run(self):
         while not self.stopped.isSet():
             self.func()
+#endregion
 
 class TextBox(tk.Frame):
     hoverEffect = ("grow/darken", (4, 4, (20, 20, 20)))
@@ -2140,6 +2181,13 @@ class Plot(tk.Canvas):
         self.bind("<ButtonRelease-1>", self.onClickUp)
         
         self.dragBox = None
+    
+    def resizeImage(self, x, y):
+        xDiv = int((x / self.imageP.width()) * 10)
+        yDiv = int((y / self.imageP.height()) * 10)
+        
+        self.imageP = self.imageP.zoom(xDiv, yDiv)
+        self.imageP = self.imageP.subsample(10, 10)
     
     def onClickDown(self, event):
         if self.clickDownFunc != None:
@@ -3093,6 +3141,7 @@ class Text(GraphicsObject):
     '''
     def __init__(self, x, y, width, height, text, color = 'black', justify = 'center', font = ("PRIMARY", 10, NORMAL), outline = None, shouldPanZoom = False, canvas = None):
         super().__init__(x, y, color, outline, shouldPanZoom, canvas)
+        
         self.width = width
         self.height = height
         self.text = text
@@ -3149,6 +3198,13 @@ class GraphicsImage(GraphicsObject):
 
     def setImage(self, image):
         self.image = image
+        
+    def resizeImage(self, x, y):
+        xDiv = int((x / self.image.width()) * 10)
+        yDiv = int((y / self.image.height()) * 10)
+        
+        self.image = self.image.zoom(xDiv, yDiv)
+        self.image = self.image.subsample(10, 10)
 
 # Arc
 class Arc(GraphicsObject):

@@ -11,51 +11,69 @@ class IFSExplorer:
     UI_IMAGES = {}
     UI_SOUNDS = {}
     
+    UI_SCALING = 0.25
     WIDTH = 600
-    HEIGHT = 750
-    PIX_WIDTH = 600 / 4
-    PIX_HEIGHT = 750 / 4
-    
-    PLOT_SIZE = 600
-    
-    transforms = []
+    HEIGHT = 850
+    PIX_WIDTH = 600 #int(600 * UI_SCALING)
+    PIX_HEIGHT = 600 #int(600 * UI_SCALING)
+        
     MAX_TRANSFORMS = 10
-    currTransformIndex = 0
+    transforms = []
+    transformGUIS = []
+    
     pixelFont = None
     
     initialTransforms = []
-    initialTransforms.append(IFS_Transform(xScale = 1/3, yScale = 1/3,
-                                    theta = -14, phi = -14,
+    
+    # Sierpinski Triangle
+    initialTransforms.append(IFS_Transform(xScale = 0.5, yScale = 0.5,
+                                    theta = 0, phi = 0,
                                     h = 0.0, k = 0.0,
                                     p = 1, c = (255, 0, 0)))
-    initialTransforms.append(IFS_Transform(xScale = 4.5/12, yScale = 4.5/12,
-                                    theta = 48, phi = 48,
-                                    h = 0.0, k = 2/12,
+    initialTransforms.append(IFS_Transform(xScale = 0.5, yScale = 0.5,
+                                    theta = 0, phi = 0,
+                                    h = 0.0, k = 0.5,
                                     p = 1, c = (0, 255 ,0)))
-    initialTransforms.append(IFS_Transform(xScale = 1/100, yScale = 1/6,
+    initialTransforms.append(IFS_Transform(xScale = 0.5, yScale = 0.5,
                                     theta = 0.0, phi = 0.0,
-                                    h = 0.0, k = 0.5/12, # h = 0.25 ???
+                                    h = 0.5, k = 0,
                                     p = 1, c = (0, 0, 255)))
-    initialTransforms.append(IFS_Transform(xScale = 10/12, yScale = 10/12, # Stem
-                                    theta = 0.0, phi = 0.0,
-                                    h = 0.0, k = 2/12, # h = 0.25 ???
-                                    p = 1, c = (0, 0, 255)))
+    
+    # FERN???
+    # initialTransforms.append(IFS_Transform(xScale = 1/3, yScale = 1/3,
+    #                                 theta = -14, phi = -14,
+    #                                 h = 0.0, k = 0.0,
+    #                                 p = 1, c = (255, 0, 0)))
+    # initialTransforms.append(IFS_Transform(xScale = 4.5/12, yScale = 4.5/12,
+    #                                 theta = 48, phi = 48,
+    #                                 h = 0.0, k = 2/12,
+    #                                 p = 1, c = (0, 255 ,0)))
+    # initialTransforms.append(IFS_Transform(xScale = 1/100, yScale = 1/6,
+    #                                 theta = 0.0, phi = 0.0,
+    #                                 h = 0.0, k = 0.5/12, # h = 0.25 ???
+    #                                 p = 1, c = (0, 0, 255)))
+    # initialTransforms.append(IFS_Transform(xScale = 10/12, yScale = 10/12, # Stem
+    #                                 theta = 0.0, phi = 0.0,
+    #                                 h = 0.0, k = 2/12, # h = 0.25 ???
+    #                                 p = 1, c = (0, 0, 255)))
     
     pixels = []
 
     point = (random.random() * 10000000.0, random.random() * 10000000.0)
 
-    minX = 10000000
-    maxX = -10000000
-    minY = 10000000
-    maxY = -10000000
+    minX = None
+    maxX = None
+    minY = None
+    maxY = None
     
     drawPadding = [10, 10]
+    
+    transformsScrollArea = None
         
     def __init__(self):
         self.initImagesAndSounds(os.path.dirname(os.path.realpath(__file__)))
         
-        self.win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT, scale = 0.25)
+        self.win = DEGraphWin("IFS Explorer", self.WIDTH + 10, self.HEIGHT + 10, scale = 0.25, debugMode = True, edgePadding = [5, 5, 5, 5])
         
         # self.win.hideTitlebar()
         self.win.update_idletasks()
@@ -71,13 +89,21 @@ class IFSExplorer:
                 
         # UI stuff
         with self.win:
-            with Stack():
+            self.mainStack = Stack(width = self.WIDTH, height = self.HEIGHT)
+            with self.mainStack:
+                # Create the header
+                Image(self.WIDTH, 100, self.getImage("header"))
+                
                 # Create the canvas and plot for drawing the IFS                
-                with Canvas(width = self.PLOT_SIZE / 4):
-                    self.plot = Plot(self.WIDTH, self.HEIGHT, self.WIDTH, self.HEIGHT)
+                with Canvas(width = self.WIDTH, height = self.PIX_HEIGHT):
+                    img = GraphicsImage(self.WIDTH / 2, self.PIX_HEIGHT / 2, PhotoImage(file = self.getImage("warning panel")), shouldPanZoom = False)
+                    img.resizeImage(self.WIDTH, self.PIX_HEIGHT)
+                    img.draw()
+                    
+                    self.plot = Plot(self.WIDTH - 40, self.PIX_HEIGHT - 40, self.WIDTH, self.PIX_HEIGHT)
                 
                 # Create the IFS Config Panel
-                # self.createIFSControlPanel()
+                self.createIFSControlPanel()
                 
                 # Plot the IFS
                 self.plotIFS()
@@ -85,31 +111,33 @@ class IFSExplorer:
     #region GUI
     # Create the IFS Control Panel
     def createIFSControlPanel(self):
-        with Flow():            
-            with Stack(width = 15):
+        self.bottomPanel = Flow(width = self.WIDTH, height = 100)
+        with self.bottomPanel:
+            buttonsPanel = Canvas(width = 50, height = 100)
+            
+            with buttonsPanel:
+                img = GraphicsImage(15 / 2, 50, PhotoImage(file = self.getImage("warning panel")), shouldPanZoom = False)
+                img.resizeImage(50, 100)
+                img.draw()
+            
                 newButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.newTransform, pressCommand = self.clickDown)
                 
-                saveButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.saveTransforms, pressCommand = self.clickDown)
+                # saveButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.saveTransforms, pressCommand = self.clickDown)
                 
-                loadButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.loadTransforms, pressCommand = self.clickDown)
+                # loadButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.loadTransforms, pressCommand = self.clickDown)
                 
-                clearButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.clearTransforms, pressCommand = self.clickDown)
+                # clearButton = ImageButton(self.getImage("button up"), self.getImage("button down"), width = 40, height = 40, command = self.clearTransforms, pressCommand = self.clickDown)
             
-            separator = Separator(width = 1, height = 100, horizontalSpacing = 5, verticalSpacing = 0)
+            Separator(width = 1, height = 100, horizontalSpacing = 5, verticalSpacing = 0)
             
             self.transformsScrollArea = HorizontalScrollView(width = self.WIDTH - 15)
-            with self.transformsScrollArea:
-                # for i in range(len(self.MAX_TRANSFORMS)):
-                #     gui = TransformGUI(0, None, self.plotIFS)
-                #     gui.forget()
-                #     self.transforms.append(gui)
-                
-                for i in range(len(self.initialTransforms)):
-                    # self.transforms[i].setTransform(self.initialTransforms[i])
-                    self.transforms.append(TransformGUI(i, self.initialTransforms[i], self.plotIFS))
-                    
-                    # // TODO: SET UP POOL
-    
+            
+            # Add initial transforms
+            for i in range(len(self.initialTransforms)):
+                gui = TransformGUI(i, 124, 143, self.initialTransforms[i], self.plotIFS, self.getImage("panel big"))
+                self.transformsScrollArea.add_widget(gui)
+                self.transforms.append(gui)
+            
     # Create the controls window
     def createControlsWindow(self):
         pass
@@ -127,12 +155,23 @@ class IFSExplorer:
     #region Transform management
     def clearTransforms(self):
         for gui in self.transforms:
-            gui.forget()
+            self.transformsScrollArea.remove_widget(gui)
+        
+        self.transforms = []
     
     def newTransform(self):
         self.clickUp()
+                
+        if len(self.transforms) < self.MAX_TRANSFORMS:
+            gui = TransformGUI(len(self.transforms) - 1, 124, 143, IFS_Transform(0, 0, 0, 0, 0, 0, 1, (255, 0, 0)), self.plotIFS, self.getImage("panel big"))
+            self.transformsScrollArea.add_widget(gui)
+            self.transforms.append(gui)
     
     def removeTransform(self, index):
+        print("removeTransform: NOT YET IMPLEMENTED")
+        
+        return
+        
         self.transforms.pop(index)
         
         for i in range(len(self.transforms)):
@@ -140,7 +179,7 @@ class IFSExplorer:
     
     def saveTransforms(self):
         print("saveTransforms: NOT YET IMPLEMENTED")
-        
+    
     def loadTransforms(self):
         print("loadTransforms: NOT YET IMPLEMENTED")
     #endregion
@@ -190,12 +229,15 @@ class IFSExplorer:
         if shouldPlot: 
             # Remap the new point to be within the screen
             remappedPt = self.remapPoint(newPt)
-
-            _x = min(self.PLOT_SIZE - 1, max(0, remappedPt[0]))
-            _y = min(self.PLOT_SIZE - 1, max(0, remappedPt[1]))
             
             # Set the pixel at this screen position to the color of the transformation
-            self.pixels[_x][_y] = colorRGB(*randTransform.color)
+            self.pixels[remappedPt[0]][remappedPt[1]] = colorRGB(*randTransform.color)
+        elif self.maxX == None:
+            # If this is the first point, set the min/max values to this point
+            self.minX = newPt[0]
+            self.maxX = newPt[0]
+            self.minY = newPt[1]
+            self.maxY = newPt[1]
         else: # If not, just update the min/max values
             if newPt[0] < self.minX:
                 self.minX = newPt[0]
@@ -211,15 +253,22 @@ class IFSExplorer:
     
     # Remap the point to stay within the screen size and within the border padding
     def remapPoint(self, point):
-        return (int(lerp(self.drawPadding[0], self.WIDTH - self.drawPadding[0], point[0])), self.HEIGHT - 1 - int(lerp(self.drawPadding[0], self.HEIGHT - self.drawPadding[0], point[1])))
+        x = point[0]
+        y = point[1]
+        
+        # Scale to pixel coords
+        x = int(lerp(self.drawPadding[0], self.PIX_WIDTH - self.drawPadding[0], x))
+        y = self.PIX_HEIGHT - int(lerp(self.drawPadding[1], self.PIX_HEIGHT - self.drawPadding[1], y))
+        
+        return (x, y)
 
     # Initialize the pixels array
     def initializePixels(self):
         self.pixels = []
-        for x in range(self.PLOT_SIZE):
+        for x in range(self.PIX_WIDTH):
             col = []
             
-            for y in range(self.HEIGHT):
+            for y in range(self.PIX_HEIGHT):
                 col.append('white')
             
             self.pixels.append(col)
@@ -266,7 +315,7 @@ class IFSExplorer:
     def quit(self):
         exit()
 
-class TransformGUI(Stack):
+class TransformGUI(Canvas):
     index = 0
     transform = None
 
@@ -279,33 +328,46 @@ class TransformGUI(Stack):
     probabilityInput = None
     colorInput = None
     
-    def __init__(self, index, transform, plotCallback, **kwargs):
+    def __init__(self, index, width, height, transform, plotCallback, img, **kwargs):
         self.index = index
-        self.transform = transform
         self.plotCallback = plotCallback
+        self.width = width
+        self.height = height
         
-        super().__init__(relief = 'raised', borderwidth = 2, **kwargs)
+        super().__init__(width = width, height = height, **kwargs)
         
-        self.initUI()
-    
-    def initUI(self):
         with self:
-            Label("Transform: " + str(self.index + 1), font = ("Small Fonts", 48, BOLD))
+            img = GraphicsImage(width / 2, height / 2, PhotoImage(file = img), shouldPanZoom = False)
+            img.resizeImage(width - 10, height - 10)
+            img.draw()
             
-            with Flow():
-                self.rInput = FloatBox(50, 20, self.transform.getR())
-                self.sInput = FloatBox(50, 20, self.transform.getS())
-            with Flow():
-                self.thetaInput = FloatBox(50, 20, self.transform.getTheta())
-                self.phiInput = FloatBox(50, 20, self.transform.getPhi())
-            with Flow():
-                self.hInput = FloatBox(50, 20, self.transform.getE())
-                self.kInput = FloatBox(50, 20, self.transform.getF())
-            with Flow():
-                self.probabilityInput = FloatBox(50, 20, self.transform.getE())
-                self.colorInput = ColorWidget(50, 20, self.transform.getColor(), "", buttonLabelPrefix = "")
-                
-            updateButton = Button("Update", command = self.updateTransform)
+            self.initUI(transform)
+            
+    
+    def initUI(self, transform):
+        if transform == None:
+            return
+        
+        self.transform = transform
+        
+        Text(self.width, 20, 2000, self.height, "dgf", font = ("Small Fonts", 48, BOLD), justify = 'left').draw()
+
+        # Label("Transform: " + str(self.index + 1), font = ("Small Fonts", 48, BOLD), width = 10, height = 10)
+        
+        # with Flow():
+        #     self.rInput = FloatBox(50, 20, self.transform.getR())
+        #     self.sInput = FloatBox(50, 20, self.transform.getS())
+        # with Flow():
+        #     self.thetaInput = FloatBox(50, 20, self.transform.getTheta())
+        #     self.phiInput = FloatBox(50, 20, self.transform.getPhi())
+        # with Flow():
+        #     self.hInput = FloatBox(50, 20, self.transform.getE())
+        #     self.kInput = FloatBox(50, 20, self.transform.getF())
+        # with Flow():
+        #     self.probabilityInput = FloatBox(50, 20, self.transform.getE())
+        #     self.colorInput = ColorWidget(50, 20, self.transform.getColor(), "", buttonLabelPrefix = "")
+            
+        # updateButton = Button("Update", command = self.updateTransform)
 
     def updateTransform(self):
         print("Before update " + str(self.transform))
@@ -315,7 +377,7 @@ class TransformGUI(Stack):
         self.plotCallback()
     
     def setTransform(self, trans):
-        self.transform = trans
+        self.initUI(trans)
     
     def transformPoint(self, x, y):
         return self.transform.transformPoint(x, y)
