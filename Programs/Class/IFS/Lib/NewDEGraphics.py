@@ -193,6 +193,9 @@ class DEGraphWin(tk.Tk):
         # Change window icon
         # self.tk.call('wm', 'iconphoto', self._w, PhotoImage(file = 'icon.png'))
     
+    def setTransparentColor(self, color):
+        self.wm_attributes("-transparentcolor", color)
+    
     # '''
     # Set the frosted glass state of the window
     # '''
@@ -495,6 +498,7 @@ class Canvas(tk.Canvas):
     dragOffset = (0, 0)
     
     drawnObjects = []
+    addedWidgets = []
     
     interactionCallback = None
     
@@ -611,6 +615,52 @@ class Canvas(tk.Canvas):
             func: The function to call
         '''
         self.bind("<B1-Motion>", func)
+    
+    def addWidget(self, widget : tk.Widget, x, y, **args):
+        '''
+        Add a Widget to the canvas.
+        
+        NOTE: You cannot add layout widgets such as Slot, Flow, Stack, HideableFrame, or Layout!
+        
+        Args:
+            widget: The Widget to add
+            x: The x position of the widget
+            y: The y position of the widget
+            width: The width of the widget
+            height: The height of the widget
+            anchor: The anchor of the widget
+        '''
+
+        # widget.pack_forget()
+        drawnWidget = self.create_window(x, y, window = widget, **args)
+        self.addedWidgets.append(drawnWidget)
+        
+        self.width = self.kw['width'] if 'width' in self.kw else self.winfo_width()
+        self.height = self.kw['height'] if 'height' in self.kw else self.winfo_height()
+    
+    def clearWidgets(self):
+        '''
+        Remove all Widgets from the canvas
+        
+        Args:
+            widget: The Widget to remove
+        '''
+        for widget in self.addedWidgets:
+            self.delete(widget)
+        
+        self.addedWidgets = []
+            
+    def removeWidget(self, widget : tk.Widget):
+        '''
+        Remove a Widget from the canvas
+        
+        Args:
+            widget: The Widget to remove
+        '''
+        if widget in self.addedWidgets:
+            self.addedWidgets.remove(widget)
+            widget.pack_forget()
+            self.delete(widget)
     
     def addDrawn(self, obj):
         '''
@@ -884,7 +934,7 @@ class ScrollView(tk.Frame):
     
     direction = 'x'
 
-    def __init__(self, direction = 'y', **kw):
+    def __init__(self, direction = 'y', background = "white", **kw):
         self.direction = direction
         self._widgets = []
 
@@ -895,15 +945,17 @@ class ScrollView(tk.Frame):
 
         global _root
 
-        super().__init__(_root, **kw)
+        super().__init__(_root, bg = background, **kw)
 
-        self.canvas = tk.Canvas(self)
+        self.canvas = tk.Canvas(self, bg = background, **kw)
+        
+        backgroundImg = PhotoImage()
 
         # self.scrollbar = tk.Scrollbar(self, orient = orient, command = self.canvas.yview if self.direction == 'y' else self.canvas.xview)
         # self.canvas.configure(yscrollcommand = self.scrollbar.set)
         # self.scrollbar.pack(side = scrollbarPackSide, fill = self.direction)
 
-        self.scrollable_frame = tk.Frame(self.canvas)
+        self.scrollable_frame = tk.Frame(self.canvas, bg = background, **kw)
         self.canvas.create_window((0, 0), window = self.scrollable_frame, anchor = "nw")
 
         self.canvas.pack(side = canvasPackSide, fill = "both", expand = True)
@@ -2162,7 +2214,7 @@ class Plot(tk.Canvas):
     dragFunc = None
     
     def __init__(self, width, height, imageHeight = -1, imageWidth = -1, background = 'white'):
-        super().__init__(_root, width = width, height = height, bd = 0, highlightthickness = 0)
+        super().__init__(_root, width = width, height = height, bd = 0, highlightthickness = 0, background = background)
         
         self.width = width
         self.height = height
@@ -2171,18 +2223,19 @@ class Plot(tk.Canvas):
         self.background = background
         
         # Create the tkinter background image object
-        self.bgImg = PhotoImage(master = _root, width = self.width, height = self.height)
-        self.bgImg.put(self.background, to = (0, 0, self.width, self.height))
-        self.backgroundObj = GraphicsImage(0, 0, self.bgImg, canvas = self) #self.create_image(0, 0, image = self.bgImg, anchor = tk.NW)
+        # self.bgImg = PhotoImage(master = _root, width = self.width, height = self.height)
+        # self.bgImg.put(self.background, to = (0, 0, self.width, self.height))
+        # self.backgroundObj = GraphicsImage(self.width / 2, self.height / 2, self.bgImg, canvas = self)
+        # self.backgroundObj.draw()
         
         # Create the tkinter image object
         self.imageP = PhotoImage(master = _root, width = self.imageWidth, height = self.imageHeight)
         
         # Set background color
         self.imageP.put(self.background, to = (0, 0, self.imageWidth, self.imageHeight))
-        self.resizeImage(self.imageWidth, self.imageHeight)
+        self.resizeImage(self.width, self.height)
         
-        self.imageObj = GraphicsImage(0, 0, self.imageP, canvas = self)
+        self.imageObj = GraphicsImage(self.width / 2, self.height / 2, self.imageP, canvas = self)
         self.imageObj.draw()
         
         self.pack(side = _pack_side)
@@ -2220,7 +2273,7 @@ class Plot(tk.Canvas):
         
         if self.enableSelectionBox:
             if self.selectionMaintainAspectRatio:
-                # Keep the selection box sqaure
+                # Keep the selection box square
                 if event.x - self.dragStart[0] > event.y - self.dragStart[1]:
                     self.selectionBox = (self.dragStart[0], self.dragStart[1], event.x, self.dragStart[1] + event.x - self.dragStart[0])
                 else:
@@ -2235,8 +2288,9 @@ class Plot(tk.Canvas):
                 # Resize the drag box
                 self.coords(self.dragBox, *self.selectionBox)
             
-            # Make sure the drag box is on top
-            self.tag_raise(self.dragBox, self.imageObj)
+                if self.imageObj != None:
+                    # Make sure the drag box is on top
+                    self.tag_raise(self.dragBox, self.imageObj)
     
     def plot(self, x, y, color):
         self.imageP.put("{color}".format(color = colorRGB(*color)), (x, y))
@@ -3197,8 +3251,8 @@ class Polygon(GraphicsObject):
 
 # Image
 class GraphicsImage(GraphicsObject):
-    def __init__(self, x, y, image, shouldPanZoom = False, canvas = None):
-        super().__init__(x, y, None, None, shouldPanZoom, canvas)
+    def __init__(self, x, y, image, color = "white", shouldPanZoom = False, canvas = None):
+        super().__init__(x, y, color, None, shouldPanZoom, canvas)
         self.image = image
 
     def _draw(self, drawX, drawY, drawScale):
@@ -3216,6 +3270,47 @@ class GraphicsImage(GraphicsObject):
         
         self.image = self.image.zoom(xDiv, yDiv)
         self.image = self.image.subsample(10, 10)
+    
+    def plot(self, x, y, color):
+        self.image.put(colorRGB(*color), (x, y))
+    
+    '''
+    Plot a list of pixel colors (as strings), starting from a point
+    '''
+    def plotBulk(self, xStart, yStart, colorList):
+        # colorStr = ""
+        # for row in range(len(colors)):
+        #     rowStr = "{"
+            
+        #     for pix in colors[row]:
+        #         rowStr += colorRGB(*pix) + " "
+            
+        #     rowStr = rowStr[:len(rowStr) - 2] + "} "
+        #     colorStr += rowStr
+    
+        self.image.put(colorList, (xStart, yStart))
+        
+    def fill(self, color, x, y, width, height):
+        '''
+        Fill a rectangle with a color
+        '''
+        colorRows = []
+        
+        for y in range(height):
+            rowColors = []
+            
+            for x in range(width):
+                rowColors.append(color)
+            
+            colorRows.append(rowColors)
+        
+        self.image.put(rowColors, to = (x, y))
+    
+    def clear(self):
+        self.image.put(self.color, to = (0, 0, self.imageWidth, self.imageHeight))
+        
+    def saveImage(self, path):
+        self.image.write(path, format = 'png')
 
 # Arc
 class Arc(GraphicsObject):
@@ -3285,6 +3380,175 @@ def roundedRect(canvas, x1, y1, x2, y2, radius = 25, **kwargs):
               x1, y1]
 
     return canvas.create_polygon(points, **kwargs, smooth = True)
+
+# Image Button
+
+class GraphicsButton(GraphicsObject):
+    """
+    A button made up of an image. There is a normal image and a clicked image. Has a hover effect.
+
+    Args:
+        image: The image to show when not pressed
+        pressedImage: The image to show when pressed
+        width: Width of the button
+        height: Height of the button
+        command: Function to be called when the button is clicked
+        commandArgs: Arguments to be passed to the command function
+    """
+    
+    # hoverEffect = ("grow", (4, 4, (20, 20, 20)))
+    enabled = True
+    mouseOver = False
+    
+    def __init__(self, x, y, image, pressedImage, width = 40, height = 40, command = None, pressCommand = None, commandArgs = None, outline = None, shouldPanZoom = False, canvas = None, **kw):
+        super().__init__(x, y, None, outline, shouldPanZoom, canvas)
+        self.command = command
+        self.commandArgs = commandArgs
+        self.pressCommand = pressCommand
+        self.kw = kw
+        self.width = width
+        self.height = height
+        self.image = PhotoImage(file = image)
+        self.pressedImage = PhotoImage(file = pressedImage)
+        self.resizeImage(self.width, self.height)
+    
+    def _draw(self, drawX, drawY, drawScale):
+        # Create representation image
+        self.id = self.canvas.create_image(drawX, drawY, image = self.image, anchor = NW)
+        
+        # Bind actions
+        self.canvas.tag_bind(self.id, "<ButtonPress-1>", self.onPress)
+        self.canvas.tag_bind(self.id, "<ButtonRelease-1>", self.onRelease)
+        self.canvas.tag_bind(self.id, '<Enter>', self.hoverEnter)
+        self.canvas.tag_bind(self.id, '<Leave>', self.hoverExit)
+    
+    def setImage(self, image, imgWidth, imgHeight):
+        '''
+        Set the button's normal image
+        '''
+        
+        self.imgWidth = imgWidth
+        self.imgHeight = imgHeight
+        
+        self.image = PhotoImage(file = image).zoom(x = self.imgWidth / self.width, y = self.imgHeight / self.height)
+        self.canvas.itemconfig(self.id, image = self.image)
+ 
+    def setPressedImage(self, pressedImage):
+        '''
+        Set the button's pressed image
+        '''
+        
+        self.pressedImage = PhotoImage(file = pressedImage).zoom(x = self.imgWidth / self.width, y = self.imgHeight / self.height)
+        self.pressedImage = pressedImage
+    
+    def setHoverEffect(self, hoverEffect):
+        '''
+        Set the button's hover effect
+        
+        Options:
+            "grow (x, y)": The button will grow when hovered over (default).
+            "darken (r, g, b)": The button will darken when hovered over.
+            "grow/darken (x, y, (r, g, b))": The button will grow and darken when hovered over.
+            "color (r, g, b)": The button will change color when hovered over.
+            "none": The button will not have a hover effect
+        '''
+        
+        self.hoverEffect = hoverEffect
+    
+    def resizeImage(self, x, y):
+        xDiv = int((x / self.image.width()) * 10)
+        yDiv = int((y / self.image.height()) * 10)
+        
+        self.image = self.image.zoom(xDiv, yDiv)
+        self.image = self.image.subsample(10, 10)
+        
+        xDiv = int((x / self.pressedImage.width()) * 10)
+        yDiv = int((y / self.pressedImage.height()) * 10)
+        
+        self.pressedImage = self.pressedImage.zoom(xDiv, yDiv)
+        self.pressedImage = self.pressedImage.subsample(10, 10)
+            
+    def hoverEnter(self, event):
+        self.mouseOver = True
+        
+        # if not self.enabled:
+        #     return
+        
+        # if self.hoverEffect[0] == "grow":
+        #     # Grow the rect
+        #     self.img.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
+        # elif self.hoverEffect[0] == "none":
+        #     pass
+        
+        # self.img.draw()
+        
+    def hoverExit(self, event):
+        self.mouseOver = False
+        
+        # if not self.enabled:
+        #     return
+        
+        # if self.hoverEffect[0] == "grow":
+        #     # Shrink the rect
+        #     self.img.grow(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
+        #     self.img.setPos(self.padding, self.padding)
+        #     self.img.resize(self.width - self.padding * 2, self.height - self.padding * 2)
+        # elif self.hoverEffect[0] == "none":
+        #     pass
+        
+        # self.img.draw()
+
+    def onPress(self, event):
+        if not self.enabled:
+            return
+        
+        # Change the image to the pressed image
+        self.canvas.itemconfig(self.id, image = self.pressedImage)
+                
+        # self.lift(self.label)
+        
+        if self.pressCommand is not None:
+            self.pressCommand()
+    
+    def onRelease(self, event):
+        if not self.enabled:
+            return
+        
+        # Change the image to the clicked image
+        self.canvas.itemconfig(self.id, image = self.image)
+        
+        # self.lift(self.label)
+        
+        if self.mouseOver:
+            if self.command is not None:
+                if self.commandArgs is not None:
+                    self.command(*self.commandArgs)
+                else:
+                    self.command()
+    
+    def disable(self):
+        if self.mouseOver:
+            self.hoverExit(None)
+        
+        self.enabled = False
+        
+        self.config(state = tk.DISABLED)
+        
+        # Darken the background color
+        # self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
+        # self.lift(self.label)
+    
+    def enable(self):
+        self.enabled = True
+        
+        self.config(state = tk.NORMAL)
+        
+        # Return the background color to normal
+        # self.rect.color = colorRGB(*self.color)
+        # self.lift(self.label)
+    
+    def isEnabled(self):
+        return self.enabled
 #endregion
 
 # Shadow widget adapted from: https://github.com/vednig/shadowTk
