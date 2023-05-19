@@ -27,7 +27,7 @@ class IFS_Transform:
     def __init__(self, xScale = 0.0, yScale = 0.0,
                  theta = 0.0, phi = 0.0,
                  h = 0.0, k = 0.0,
-                 p = 1, c = (255, 0, 0)):
+                 p = 1.0, c = (255, 0, 0)):
         # scaling and reflection
         self.r = xScale
         self.s = yScale
@@ -114,3 +114,11 @@ class IFS_Transform:
         result += 'prob(' + str(self.prob) + '), '
         result += 'col(' + str(self.color) + ')]'
         return result
+
+    def toDict(self):
+        # Return a dictionary representation of this transform
+        return {'r': self.r, 's': self.s, 'theta': self.theta, 'phi': self.phi, 'e': self.e, 'f': self.f, 'prob': self.prob, 'color': self.color}
+    
+    def ofDict(dictionary):
+        # Take dictionary and return an IFS_Transform object
+        return IFS_Transform(dictionary['r'], dictionary['s'], dictionary['theta'], dictionary['phi'], dictionary['e'], dictionary['f'], dictionary['prob'], dictionary['color'])

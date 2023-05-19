@@ -3382,7 +3382,6 @@ def roundedRect(canvas, x1, y1, x2, y2, radius = 25, **kwargs):
     return canvas.create_polygon(points, **kwargs, smooth = True)
 
 # Image Button
-
 class GraphicsButton(GraphicsObject):
     """
     A button made up of an image. There is a normal image and a clicked image. Has a hover effect.
@@ -3400,7 +3399,7 @@ class GraphicsButton(GraphicsObject):
     enabled = True
     mouseOver = False
     
-    def __init__(self, x, y, image, pressedImage, width = 40, height = 40, command = None, pressCommand = None, commandArgs = None, outline = None, shouldPanZoom = False, canvas = None, **kw):
+    def __init__(self, x, y, image, pressedImage, width = 40, height = 40, tooltipText = "", command = None, pressCommand = None, commandArgs = None, outline = None, shouldPanZoom = False, canvas = None, **kw):
         super().__init__(x, y, None, outline, shouldPanZoom, canvas)
         self.command = command
         self.commandArgs = commandArgs
@@ -3411,16 +3410,20 @@ class GraphicsButton(GraphicsObject):
         self.image = PhotoImage(file = image)
         self.pressedImage = PhotoImage(file = pressedImage)
         self.resizeImage(self.width, self.height)
+        self.tooltipText = tooltipText
     
     def _draw(self, drawX, drawY, drawScale):
         # Create representation image
         self.id = self.canvas.create_image(drawX, drawY, image = self.image, anchor = NW)
         
+        if self.tooltipText != "":
+            self.tooltip = GraphicsTooltip(self.canvas, self, self.tooltipText)
+        
         # Bind actions
-        self.canvas.tag_bind(self.id, "<ButtonPress-1>", self.onPress)
-        self.canvas.tag_bind(self.id, "<ButtonRelease-1>", self.onRelease)
-        self.canvas.tag_bind(self.id, '<Enter>', self.hoverEnter)
-        self.canvas.tag_bind(self.id, '<Leave>', self.hoverExit)
+        self.canvas.tag_bind(self.id, "<ButtonPress-1>", self.onPress, add = "+")
+        self.canvas.tag_bind(self.id, "<ButtonRelease-1>", self.onRelease, add = "+")
+        self.canvas.tag_bind(self.id, '<Enter>', self.hoverEnter, add = "+")
+        self.canvas.tag_bind(self.id, '<Leave>', self.hoverExit, add = "+")
     
     def setImage(self, image, imgWidth, imgHeight):
         '''
@@ -3549,6 +3552,304 @@ class GraphicsButton(GraphicsObject):
     
     def isEnabled(self):
         return self.enabled
+
+# Image Input
+class GraphicsInputBox(GraphicsObject):
+    hoverEffect = ("grow/darken", (4, 4, (20, 20, 20)))
+    enabled = True
+    validInput = True
+    mouseOver = False
+    
+    '''
+    A text box where the user can type things into.
+
+    Args:
+        width: Width of the text box
+        height: Height of the text box
+        text: The placeholder in the text box
+        command: A function to be called when the text is changed
+        commandArgs: Arguments to be passed to the command function
+        executeOnType: Whether or not to execute the command function on every key press
+        padding: Padding around the text box
+        cornerRadius: Corner radius of the text box
+        color: Color of the text box
+        textColor: Color of the text
+    '''
+    def __init__(self, width, height, text = "", command = None, commandArgs = None, executeOnType = True, padding = 5, cornerRadius = 10, color = (200, 200, 200), textColor = (0, 0, 0), invalidTextColor = (255, 20, 20), **kwargs):
+        self.textvariable = tk.StringVar()
+        self.textvariable.set(text)
+        
+        self.width = width
+        self.height = height
+        self.command = command
+        self.commandArgs = commandArgs
+        self.executeOnType = executeOnType
+        self.color = color
+        self.textColor = textColor
+        self.invalidTextColor = invalidTextColor
+        
+        # Create actual entry object
+        self.entry = tk.Entry(self, width = width, textvariable = self.textvariable, highlightthickness = 0, bg = colorRGB(*self.color), fg = colorRGB(*self.textColor), relief = "flat", **kwargs)
+        self.entry.place(relx = cornerRadius / width, rely = padding / height, relwidth = 1 - ((cornerRadius * 2) / width), relheight = 1 - ((padding * 2) / height))
+
+        # Create background rounded rectangle
+        self.rect = RoundedRectangle(padding, padding, width - (padding * 2), height - (padding * 2), cornerRadius, color = colorRGB(*self.color), canvas = self.canvas)
+        self.rect.draw()
+    
+        # Bind actions
+        val = self.register(self.validateChar)
+        self.entry.config(validate = "key", validatecommand = (val, '%P'))
+        self.entry.bind('<Return>', self.submit)
+        self.bind('<Enter>', self.hoverEnter)
+        self.bind('<Leave>', self.hoverExit)
+    
+        self.pack(side = _pack_side)
+    
+    def setHoverEffect(self, hoverEffect):
+        '''
+        Set the widget's hover effect
+        
+        Options:
+            "grow (x, y)": The widget will grow when hovered over (default).
+            "darken (r, g, b)": The widget will darken when hovered over.
+            "grow/darken (x, y, (r, g, b))": The widget will grow and darken when hovered over.
+            "color (r, g, b)": The widget will change color when hovered over.
+            "none": The widget will not have a hover effect
+        '''
+        self.hoverEffect = hoverEffect
+    
+    def hoverEnter(self, event):
+        if not self.enabled:
+            return
+        
+        self.mouseOver = True
+        
+        if self.hoverEffect[0] == "grow":
+            # Grow the rect
+            self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
+        elif self.hoverEffect[0] == "darken":
+            # Darken the rect
+            self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][0], self.color[1] - self.hoverEffect[1][1], self.color[2] - self.hoverEffect[1][2])
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "grow/darken":
+            # Grow and darken the rect
+            self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
+            self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][2][0], self.color[1] - self.hoverEffect[1][2][1], self.color[2] - self.hoverEffect[1][2][2])
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "color":
+            # Change the rect color
+            self.rect.color = colorRGB(*self.hoverEffect[1])
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "none":
+            pass
+        
+        self.rect.draw()
+        
+    def hoverExit(self, event):
+        if not self.enabled:
+            return
+        
+        self.mouseOver = True
+        
+        if self.hoverEffect[0] == "grow":
+            # Shrink the rect
+            self.rect.grow(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
+        elif self.hoverEffect[0] == "darken":
+            # Return the rect color to normal
+            self.rect.color = colorRGB(*self.color)
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "grow/darken":
+            # Return the rect size and color to normal
+            self.rect.grow(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
+            self.rect.color = colorRGB(*self.color)
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "color":
+            # Return the rect color to normal
+            self.rect.color = colorRGB(*self.color)
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "none":
+            pass
+        
+        self.rect.draw()
+    
+    def disable(self):
+        if self.mouseOver:
+            self.hoverExit(None)
+            
+        self.enabled = False
+        
+        self.config(state = tk.DISABLED)
+            
+        # Lighten the text color and darken the background color
+        self.itemconfig(self.text, fill = colorRGB(min(255, self.textColor[0] + 100), min(255, self.textColor[1] + 100), min(255, self.textColor[2] + 100)))
+        self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
+    
+    def enable(self):
+        self.enabled = True
+        
+        self.config(state = tk.NORMAL)
+        
+        # Return the text color and the background color to normal
+        self.rect.color = colorRGB(*self.color)
+    
+    # Validate each character that gets typed
+    def validateChar(self, newText):
+        if not self.enabled:
+            return False
+    
+        # Set text color to black
+        self.entry.config(foreground = colorRGB(*self.textColor))
+        self.validInput = True
+        
+        if self.executeOnType:
+            self.submit(None, newText)
+        
+        return True
+    
+    def submit(self, value, newText = None):
+        if not self.enabled:
+            return False
+        
+        # Execute callback function with its arguments and the inputted text
+        if self.validInput and self.command != None:
+            if self.commandArgs != None and len(self.commandArgs) != 0:
+                if newText:
+                    self.command(newText, *self.commandArgs)
+                else:
+                    self.command(self.text, *self.commandArgs)
+            else:
+                if newText:
+                    self.command(newText)
+                else:
+                    self.command(self.text)
+
+        # Unfocus this entry if this wasn't called by typing
+        if newText == None:
+            _root.focus()
+    
+    def setInputCallback(self, callback, *args):
+        self.command = callback
+        self.commandArgs = args
+    
+    @property
+    def text(self):
+        return self.textvariable.get()
+    
+    @text.setter
+    def text(self, text):
+        self.textvariable.set(text)
+
+class GraphicsTooltip:
+    def __init__(self, canvas, graphicsObject, text, waitTime = 500, xOffset = 10, yOffset = 10, **kwargs):
+        """
+        Tooltip widget
+        
+        Args:
+            widget: any graphics object
+            text: tooltip text
+            waitTime: time in milliseconds to wait before showing tooltip
+            xOffset(int): x - offset (pixels) of tooltip box from mouse pointer
+            yoOfset(int): y - offset (pixels) of tooltip box from mouse pointer
+            kwargs: parameters to be passed to tooltip label, e.g: , background = 'red', foreground = 'blue', etc
+        """
+        self.graphicsObject = graphicsObject
+        self.canvas = canvas
+        self._text = text
+        self.waitTime = waitTime  # milliseconds
+        self.xOffset = xOffset
+        self.yOffset = yOffset
+        self.kwargs = kwargs
+        self.tooltipWindow = None
+        self.label = None
+        self.id = None
+        self._id1 = self.canvas.tag_bind(self.graphicsObject.id, "<Enter>", self.showTooltip, add = '+')
+        self._id2 = self.canvas.tag_bind(self.graphicsObject.id, "<Leave>", self.hideTooltip, add = '+')
+        self._id3 = self.canvas.tag_bind(self.graphicsObject.id, "<ButtonPress>", self.hideTooltip, add = '+')
+
+        # For dynamic tooltips, use widget.update_tooltip('new text')
+        canvas.update_tooltip = self.updateTooltip
+
+        canvas.tooltip = self
+
+    def __del__(self):
+        try:
+            self.canvas.tag_unbind(self.graphicsObject.id, "<Enter>")
+            self.canvas.tag_unbind(self.graphicsObject.id, "<Leave>")
+            self.canvas.tag_unbind(self.graphicsObject.id, "<ButtonPress>")
+            self.unschedule()
+            self.hide()
+        except tk.TclError:
+            pass
+
+    @property
+    def text(self):
+        return self._text
+
+    @text.setter
+    def text(self, txt):
+        self._text = txt
+        self.updateTooltip(txt)
+
+    def updateTooltip(self, text):
+        self._text = text
+        try:
+            self.label.config(text = text)
+        except:
+            pass
+
+    def showTooltip(self, event = None):
+        self.schedule()
+
+    def hideTooltip(self, event = None):
+        self.unschedule()
+        self.hide()
+
+    def schedule(self):
+        self.unschedule()
+        self.id = self.canvas.after(self.waitTime, self.show)
+
+    def unschedule(self):
+        if self.id:
+            self.canvas.after_cancel(self.id)
+            self.id = None
+
+    def show(self):
+        if self.tooltipWindow:
+            return
+
+        # tip text should be displayed away from the mouse pointer to prevent triggering leave event
+        x = self.canvas.winfo_pointerx() + self.xOffset
+        y = self.canvas.winfo_pointery() + self.yOffset
+
+        self.tooltipWindow = tw = tk.Toplevel(self.canvas)
+
+        # show no border on the top level window
+        tw.wm_overrideredirect(1)
+
+        self.label = tk.Label(tw, text = self.text, justify = tk.LEFT, padx = 5, pady = 2, background = 'white', relief = tk.SOLID, borderwidth = 1)
+        self.tooltipWindow.bind('<Configure>', lambda event: self.label.config(wraplength = 150))
+
+        lbl = self.label
+        self.kwargs['background'] = self.kwargs.get('background') or self.kwargs.get('bg') or 'white'
+        self.kwargs['foreground'] = self.kwargs.get('foreground') or self.kwargs.get('fg') or 'black'
+        configureWidget(lbl, **self.kwargs)
+
+        # get text width using font, because .winfo_width() needs to call "update_idletasks()" to get correct width
+        font = tkFont.Font(font = lbl['font'])
+        lineCount = font.measure(self.label.cget('text')) / 150
+        textWidth = font.measure(self.label.cget('text'))
+
+        # Correct the position to keep the tooltip inside the screen
+        if (x + (textWidth / lineCount) + 20) > lbl.winfo_screenwidth():
+            x = self.canvas.master.winfo_screenwidth() - (textWidth / lineCount) - 20
+        
+        tw.wm_geometry("+%d+%d" % (x, y))
+        lbl.pack()
+
+    def hide(self):
+        if self.tooltipWindow:
+            self.tooltipWindow.destroy()
+            self.tooltipWindow = None
 #endregion
 
 # Shadow widget adapted from: https://github.com/vednig/shadowTk
@@ -4733,7 +5034,7 @@ def colorRGB(r, g, b):
     Returns color specifier string for the resulting color'''
     return "#%02x%02x%02x" % (r,g,b)
 
-def remap(value, min1, max1, min2, max2) -> float:
+def remap(value, min1, max1, min2, max2):
     return min2 + (value - min1) * (max2 - min2) / (max1 - min1)
 
 def remapClamped(value, min1, max1, min2, max2) -> float:
@@ -4748,7 +5049,7 @@ def lerpColor(color1, color2, amount):
     b = int(lerp(amount, color1[2], color2[2]))
     return (r, g, b)
 
-def lerp(val, a, b) -> float:
+def lerp(val, a, b):
     return a + (b - a) * val
 
 def inverseLerp(val, a, b) -> float:
