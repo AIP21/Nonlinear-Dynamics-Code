@@ -1,4 +1,5 @@
 import random
+import traceback
 from Lib.NewDEGraphics import *
 from Lib.transform import *
 from Lib.playsound import playsound
@@ -20,8 +21,8 @@ class IFSExplorer:
     BOTTOM_BAR_HEIGHT = 124
     
     PLOT_HEIGHT = WIDTH #HEIGHT - TOP_BAR_HEIGHT - BOTTOM_BAR_HEIGHT
-    PIX_WIDTH = (WIDTH - 64) // 4 #int(600 * UI_SCALING)
-    PIX_HEIGHT = (PLOT_HEIGHT - 64) // 4  #int(600 * UI_SCALING)
+    PIX_WIDTH = int((WIDTH - 64) / (1 / UI_SCALING))
+    PIX_HEIGHT = int((PLOT_HEIGHT - 64) / (1 / UI_SCALING))
         
     MAX_TRANSFORMS = 20
     transforms = []
@@ -39,7 +40,7 @@ class IFSExplorer:
     initialTransforms.append(IFS_Transform(xScale = 0.5, yScale = 0.5,
                                     theta = 0.0, phi = 0.0,
                                     h = 0.0, k = 0.5,
-                                    p = 1, c = (0, 255, 0)))
+                                    p = 0.1, c = (0, 255, 0)))
     initialTransforms.append(IFS_Transform(xScale = 0.5, yScale = 0.5,
                                     theta = 0.0, phi = 0.0,
                                     h = 0.5, k = 0.0,
@@ -64,7 +65,7 @@ class IFSExplorer:
     
     pixels = []
 
-    point = (random.random() * 100000.0, random.random() * 100000.0)
+    point = (random.random(), random.random())
 
     minX = None
     maxX = None
@@ -78,7 +79,7 @@ class IFSExplorer:
     def __init__(self):
         self.initImagesAndSounds(os.path.dirname(os.path.realpath(__file__)))
         
-        self.win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT, scale = 0.25, debugMode = True)
+        self.win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT, scale = self.UI_SCALING, debugMode = True)
         
         # self.win.hideTitlebar()
         self.win.setTransparentColor("#ad0099")
@@ -119,27 +120,13 @@ class IFSExplorer:
                 plotImage = PhotoImage(width = self.PIX_WIDTH, height = self.PIX_HEIGHT)
                 plotImage.put(colorRGB(28, 51, 5), to = (0, 0, self.PIX_WIDTH, self.PIX_HEIGHT))
                 
-                # halfW = self.PIX_WIDTH // 2
-                # halfH = self.PIX_HEIGHT // 2
-                
-                # plotImage.put(colorRGB(255, 255, 255), to = (halfW - 10, halfH - 10, halfW + 10, halfH + 10))
-                # plotImage.put(colorRGB(255, 0, 0), to = (0, 0))
-                # plotImage.put(colorRGB(0, 255, 0), to = (self.PIX_WIDTH - 1, self.PIX_HEIGHT - 1))
-                # plotImage.put(colorRGB(0, 0, 255), to = (0, self.PIX_HEIGHT - 1))
-                # plotImage.put(colorRGB(255, 255, 0), to = (self.PIX_WIDTH - 1, 0))
-                
-                # plotImage = self.resizeImage(plotImage, self.WIDTH - 64, self.PLOT_HEIGHT - 64)
-                
                 self.plot = GraphicsImage(self.WIDTH / 2, self.TOP_BAR_HEIGHT + self.PLOT_HEIGHT / 2, plotImage, shouldPanZoom = False)
                 self.plot.resizeImage(self.WIDTH - 64, self.PLOT_HEIGHT - 64)
                 self.plot.draw()
                 
                 self.plotOverlay = GraphicsImage(self.WIDTH / 2, self.TOP_BAR_HEIGHT + self.PLOT_HEIGHT / 2, PhotoImage(file = self.getImage("plot overlay")), shouldPanZoom = False)
                 self.plotOverlay.resizeImage(self.WIDTH - 64, self.PLOT_HEIGHT - 64)
-                # self.plotOverlay.draw()
-                
-                # self.plot = Plot(self.WIDTH - 64, self.PLOT_HEIGHT - 64, self.PIX_WIDTH, self.PIX_HEIGHT, background = colorRGB(114, 114, 114))
-                # mainCanvas.addWidget(self.plot, self.WIDTH / 2, self.TOP_BAR_HEIGHT + self.PLOT_HEIGHT / 2, width = self.WIDTH - 64, height = self.PLOT_HEIGHT - 64)
+                self.plotOverlay.draw()
             
             # Create the IFS Config Panel
             self.createIFSControlPanel()
@@ -159,7 +146,7 @@ class IFSExplorer:
             buttonsPanel = Canvas(width = buttonPanelWidth, height = bottomPanelHeight, bg = "#ad0099")
             
             with buttonsPanel:
-                img = GraphicsImage(buttonPanelWidth / 2, bottomPanelHeight / 2, PhotoImage(file = self.getImage("panel long")), shouldPanZoom = False)
+                img = GraphicsImage(buttonPanelWidth / 2, bottomPanelHeight / 2, PhotoImage(file = self.getImage("warning panel long")), shouldPanZoom = False)
                 img.resizeImage(buttonPanelWidth, bottomPanelHeight)
                 img.draw()
                 
@@ -305,27 +292,27 @@ class IFSExplorer:
         
         self.initializePixels()
         
-        self.point = (random.random() * 10000000.0, random.random() * 10000000.0)
+        self.point = (random.random(), random.random())
         
-        print("Start point: " + str(self.point))
+        # print("Start point: " + str(self.point))
 
         self.minX = None
         self.maxX = None
         self.minY = None
         self.maxY = None
-                
-        img = PhotoImage(width = self.PIX_WIDTH, height = self.PIX_HEIGHT)
-        # img = self.resizeImage(img, self.PIX_WIDTH, self.PIX_HEIGHT)
+        
+        self.plot.resizeImage(self.PIX_WIDTH, self.PIX_HEIGHT)
+        img = self.plot.getImage()
         img.put(colorRGB(28, 51, 5), to = (0, 0, img.width(), img.height()))
 
-        # Initial iterations to covnerge before checking min and max
-        # for i in range(100):
-        #     self.iterate(False, False)
+        # Transient iterations to covnerge before checking min and max
+        for i in range(10000):
+            self.iterate(False, False)
         
         # print("Point after head start: " + str(self.point))
         
         # For getting min and max
-        for i in range(100000):
+        for e in range(1000):
             self.iterate(False, True)
         
         print("MinX: " + str(self.minX))
@@ -334,49 +321,28 @@ class IFSExplorer:
         print("MaxY: " + str(self.maxY))
         
         # For plotting
-        for i in range(10000):
-            self.iterate(True, False)
+        try:
+            for j in range(100000):
+                self.iterate(True, False)
+        except Exception as e:
+            print("Size: " + str(self.PIX_WIDTH) + "x" + str(self.PIX_HEIGHT) + " Point: " + str(self.point) + " remapped: " + str(self.remapPt))
+            print("Error: " + str(e) + " stack: " + str(traceback.format_exc()))
         
         print("Done iterating")
         
         img.put(self.pixels, (0, 0))
         
-        w = self.PIX_WIDTH
-        h = self.PIX_HEIGHT
-        
-        halfW = w // 2
-        halfH = h // 2
-        
-        # # img.put(colorRGB(255, 255, 255), to = (halfW - 10, halfH - 10, halfW + 10, halfH + 10))
-        # img.put(colorRGB(255, 255, 255), to = (halfW, halfH))
-        # img.put(colorRGB(255, 0, 0), to = (0, 0))
-        # img.put(colorRGB(0, 255, 0), to = (w - 1, h - 1))
-        # img.put(colorRGB(0, 0, 255), to = (0, h - 1))
-        # img.put(colorRGB(255, 255, 0), to = (w - 1, 0))
-        
-        # img = self.resizeImage(img, self.WIDTH - 64, self.PLOT_HEIGHT - 64)
         self.plot.setImage(img)
         self.plot.resizeImage(self.WIDTH - 64, self.PLOT_HEIGHT - 64)
         self.plot.draw()
         
         # Keep overlay above plot
-        # self.mainCanvas.lift(self.plotOverlay.id, self.plot.id)
-    
-    def randIndex(self,weights):
-        r = random.uniform(0, 1)
-        t = 0
-        s = weights[0]
-        while r > s:
-            t += 1
-            s = s + weights[t]
-        return min(t, len(weights) - 1)
+        self.mainCanvas.lift(self.plotOverlay.id, self.plot.id)
     
     # Iterate the IFS system
     def iterate(self, shouldPlot, checkMinMax):
         # Choose a random transformation for this iteration, uses the probabilities of each transformation
-        # ind = self.randIndex([t.transform.getProb() for t in self.transforms])
-        # randTransform = self.transforms[ind].transform #random.choices(self.transforms, weights = [t.transform.getProb() for t in self.transforms], k = 1)[0].transform
-        randTransform = self.initialTransforms[random.randint(0, len(self.initialTransforms) - 1)]#.transform
+        randTransform = random.choices(self.transforms, weights = [t.transform.getProb() for t in self.transforms], k = 1)[0].transform
         
         # Transform the current point and keep it as a new point
         newPt = randTransform.transformPoint(self.point[0], self.point[1])
@@ -386,8 +352,11 @@ class IFSExplorer:
             # Remap the new point to be within the screen
             pt = self.remapPoint(newPt)
             
-            # Set the pixel at this screen position to the color of the transformation
-            self.pixels[int(pt[0])][int(pt[1])] = colorRGB(*randTransform.color)
+            self.remapPt = pt
+            
+            if pt[0] < self.PIX_WIDTH and pt[1] < self.PIX_HEIGHT:
+                # Set the pixel at this screen position to the color of the transformation
+                self.pixels[floor(pt[0])][floor(pt[1])] = colorRGB(*randTransform.color)
         elif checkMinMax and self.maxX == None:
             # If this is the first point, set the min/max values to this point
             self.minX = newPt[0]
@@ -414,21 +383,10 @@ class IFSExplorer:
         y = point[1]
         
         # Scale to pixel coords
-        x = int(lerp(self.drawPadding[0], self.PIX_WIDTH - self.drawPadding[0], x))
-        y = self.PIX_HEIGHT - int(lerp(self.drawPadding[1], self.PIX_HEIGHT - self.drawPadding[1], y))
+        x = self.PIX_WIDTH - remap(x, self.minX, self.maxX, 0.0, self.PIX_WIDTH)
+        y = self.PIX_HEIGHT - remap(y, self.minY, self.maxY, 0.0, self.PIX_HEIGHT)
         
         return (x, y)
-
-        # x = remap(point[0], self.minX, self.maxX, 0.0, self.PIX_WIDTH)
-        # y = remap(point[1], self.minY, self.maxY, 0.0, self.PIX_HEIGHT)
-        
-        # # Scale to pixel coords
-        # # x = scaledX * self.PIX_WIDTH
-        # # y = scaledY * self.PIX_HEIGHT
-        x   
-        # # print((x, y))
-        
-        # return (int(x), int(y))
 
     # Initialize the pixels array
     def initializePixels(self):
@@ -441,16 +399,6 @@ class IFSExplorer:
                 col.append(colorRGB(28, 51, 5))
             
             self.pixels.append(col)
-    
-    # Resize a PhotoImage
-    def resizeImage(self, image, width, height):
-        xDiv = int((width / image.width()) * 10)
-        yDiv = int((height / image.height()) * 10)
-        
-        image = image.zoom(xDiv, yDiv)
-        image = image.subsample(10, 10)
-        
-        return image
     #endregion
     
     #region UI Images and Sounds

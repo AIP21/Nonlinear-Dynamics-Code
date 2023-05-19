@@ -5037,10 +5037,10 @@ def colorRGB(r, g, b):
 def remap(value, min1, max1, min2, max2):
     return min2 + (value - min1) * (max2 - min2) / (max1 - min1)
 
-def remapClamped(value, min1, max1, min2, max2) -> float:
+def remapClamped(value, min1, max1, min2, max2):
     return clamp(min2 + (value - min1) * (max2 - min2) / (max1 - min1), min2, max2)
 
-def clamp(value, minimum, maximum) -> float:
+def clamp(value, minimum, maximum):
     return max(minimum, min(value, maximum))
 
 def lerpColor(color1, color2, amount):
