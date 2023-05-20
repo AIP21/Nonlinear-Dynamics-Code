@@ -10,8 +10,8 @@ from contextlib import contextmanager
 from decimal import Decimal
 import struct
 import platform
-import ctypes
 import subprocess
+import os
 
 try: # python 3
     import tkinter as tk
@@ -109,6 +109,7 @@ except ImportError: # python 2
     from Tkinter import TRUE
     from Tkinter import FALSE
 
+PRIMARY = 'PRIMARY'
 NORMAL = 'normal'
 BOLD = 'bold'
 _primaryFont = None
@@ -153,14 +154,19 @@ class DEGraphWin(tk.Tk):
         title (str): Title of the window
         width (int): Width of the window
         height (int): Height of the window
+        scale (float): Scale of the window (1 = 100%)
         showScrollbar (boolean): Whether or not to show a scrollbar (if the content is taller than the window)
+        x (int): X position of the window, if -1 then it will be centered
+        y (int): Y position of the window, if -1 then it will be centered
         edgePadding (list): Padding to add to the edges of the window. [left, top, right, bottom]
+        icon (string): The path to the icon to use for the window. Must be a .ico file. If "" then it will try to use an icon called "icon.ico" from the current working directory (NOT the Lib directory that DE Graphics should be in)
+        debugMode (boolean): Whether or not to run in debug mode (makes printing errors occur mode often (I think... look at tkinter documentation for more info))
         **kw: Other arguments to pass to tk.Tk
     """
     
     dragStart = (0, 0)
     
-    def __init__(self, title = "DE Graphics Window", width = 500, height = 500, scale = 1, showScrollbar = False, x = -1, y = -1, edgePadding = [0, 0, 0, 0], debugMode = True, **kw):
+    def __init__(self, title = "DE Graphics Window", width = 500, height = 500, scale = 1, showScrollbar = False, x = -1, y = -1, edgePadding = [0, 0, 0, 0], icon = "", debugMode = True, **kw):
         tk.Tk.__init__(self, sync = debugMode, **kw)
         self.setScale(scale)
         self.title(title)
@@ -181,18 +187,35 @@ class DEGraphWin(tk.Tk):
         # self.config(bg = 'green')
         # self.wm_attributes("-transparent", 'green')
         
+        # Set window size and position
+        self.geometry('%dx%d' % (width, height))
+        
         x = x if x != -1 else (self.winfo_screenwidth() - width) / 2
         y = y if y != -1 else (self.winfo_screenheight() - height) / 2
-        
-        # Set window size and position
-        self.geometry('%dx%d+%d+%d' % (width, height, x, y))
+    
+        self.geometry('+%d+%d' % (x, y))
     
         # Blur the background
         # GlobalBlur(self.HWND)
         
         # Change window icon
-        # self.tk.call('wm', 'iconphoto', self._w, PhotoImage(file = 'icon.png'))
-    
+        if icon != "":
+            self.iconbitmap(icon)
+        else: # Try to automatically get icon at this path
+            path = os.path.dirname(os.path.realpath(__file__)).replace("\Lib", "")
+            
+            if platform.system() == 'Windows':
+                file = path + '\\icon.ico'
+                if os.path.isfile(file):
+                    self.iconbitmap(file)
+                    # self.tk.call('wm', 'iconphoto', self._w, PhotoImage(file = file))
+            
+            elif platform.system() == 'Darwin':
+                file = path + '\\icon.ico'
+                if os.path.isfile(file):
+                    self.iconbitmap(file)
+                    # self.tk.call('wm', 'iconphoto', self._w, PhotoImage(file = file))
+        
     def setTransparentColor(self, color):
         self.wm_attributes("-transparentcolor", color)
     
@@ -498,7 +521,7 @@ class Canvas(tk.Canvas):
     dragOffset = (0, 0)
     
     drawnObjects = []
-    addedWidgets = []
+    addedWidgets = {}
     
     interactionCallback = None
     
@@ -633,7 +656,7 @@ class Canvas(tk.Canvas):
 
         # widget.pack_forget()
         drawnWidget = self.create_window(x, y, window = widget, **args)
-        self.addedWidgets.append(drawnWidget)
+        self.addedWidgets[widget] = drawnWidget
         
         self.width = self.kw['width'] if 'width' in self.kw else self.winfo_width()
         self.height = self.kw['height'] if 'height' in self.kw else self.winfo_height()
@@ -645,10 +668,10 @@ class Canvas(tk.Canvas):
         Args:
             widget: The Widget to remove
         '''
-        for widget in self.addedWidgets:
-            self.delete(widget)
+        for widget in self.addedWidgets.keys():
+            self.delete(self.addedWidgets[widget])
         
-        self.addedWidgets = []
+        self.addedWidgets = {}
             
     def removeWidget(self, widget : tk.Widget):
         '''
@@ -657,10 +680,10 @@ class Canvas(tk.Canvas):
         Args:
             widget: The Widget to remove
         '''
-        if widget in self.addedWidgets:
-            self.addedWidgets.remove(widget)
-            widget.pack_forget()
-            self.delete(widget)
+        if widget in self.addedWidgets.keys():
+            self.addedWidgets.setdefault(widget)
+        
+        self.delete(self.addedWidgets[widget])
     
     def addDrawn(self, obj):
         '''
@@ -3049,7 +3072,7 @@ class GraphicsObject:
     isDrawn = False
     shouldPanZoom = False
 
-    def __init__(self, x, y, color, outline, shouldPanZoom = False, canvas = None):
+    def __init__(self, x, y, color, outline, shouldPanZoom = False, canvas = None, scale = 1):
         global _canvas
         # if type(canvas) == DEGraphWin or type(canvas) == Window:
         #     # Throw exception
@@ -3074,6 +3097,7 @@ class GraphicsObject:
         self.x = x
         self.y = y
         self.shouldPanZoom = shouldPanZoom
+        self.scale = scale
         
         if type(color) == str or color == None:
             self.color = color
@@ -3381,6 +3405,199 @@ def roundedRect(canvas, x1, y1, x2, y2, radius = 25, **kwargs):
 
     return canvas.create_polygon(points, **kwargs, smooth = True)
 
+# Image TextBox
+class GraphicsTextBox(GraphicsObject):
+    hoverEffect = ("grow/darken", (4, 4, (20, 20, 20)))
+    enabled = True
+    validInput = True
+    mouseOver = False
+    
+    '''
+    A text box where the user can type things into.
+
+    Args:
+        width: Width of the text box
+        height: Height of the text box
+        text: The placeholder in the text box
+        command: A function to be called when the text is changed
+        commandArgs: Arguments to be passed to the command function
+        executeOnType: Whether or not to execute the command function on every key press
+        padding: Padding around the text box
+        cornerRadius: Corner radius of the text box
+        color: Color of the text box
+        textColor: Color of the text
+    '''
+    def __init__(self, width, height, imageFile, text = "", command = None, commandArgs = None, executeOnType = True, padding = 5, cornerRadius = 10, color = (200, 200, 200), textColor = (0, 0, 0), invalidTextColor = (255, 20, 20), **kwargs):
+        self.textvariable = tk.StringVar()
+        self.textvariable.set(text)
+        
+        self.width = width
+        self.height = height
+        self.command = command
+        self.commandArgs = commandArgs
+        self.executeOnType = executeOnType
+        self.color = color
+        self.textColor = textColor
+        self.invalidTextColor = invalidTextColor
+        
+        # tk.Frame.__init__(self, _root, width = width, height = height, highlightthickness = 0)
+
+        img = PhotoImage(file = imageFile, width = width, height = height)
+        
+        self.image = GraphicsImage(0, 0, img, shouldPanZoom = False, canvas = self.canvas)
+        self.image.draw()
+        
+        # Create actual entry object
+        self.entry = tk.Entry(self, width = width, textvariable = self.textvariable, highlightthickness = 0, bg = colorRGB(*self.color), fg = colorRGB(*self.textColor), relief = "flat", **kwargs)
+        self.entry.place(relx = cornerRadius / width, rely = padding / height, relwidth = 1 - ((cornerRadius * 2) / width), relheight = 1 - ((padding * 2) / height))
+
+        # Create background rounded rectangle
+        self.rect = RoundedRectangle(padding, padding, width - (padding * 2), height - (padding * 2), cornerRadius, color = colorRGB(*self.color), canvas = self.canvas)
+        self.rect.draw()
+    
+        # Bind actions
+        val = self.register(self.validateChar)
+        self.entry.config(validate = "key", validatecommand = (val, '%P'))
+        self.entry.bind('<Return>', self.submit)
+        self.bind('<Enter>', self.hoverEnter)
+        self.bind('<Leave>', self.hoverExit)
+    
+        self.pack(side = _pack_side)
+    
+    def setHoverEffect(self, hoverEffect):
+        '''
+        Set the widget's hover effect
+        
+        Options:
+            "grow (x, y)": The widget will grow when hovered over (default).
+            "darken (r, g, b)": The widget will darken when hovered over.
+            "grow/darken (x, y, (r, g, b))": The widget will grow and darken when hovered over.
+            "color (r, g, b)": The widget will change color when hovered over.
+            "none": The widget will not have a hover effect
+        '''
+        self.hoverEffect = hoverEffect
+    
+    def hoverEnter(self, event):
+        if not self.enabled:
+            return
+        
+        self.mouseOver = True
+        
+        if self.hoverEffect[0] == "grow":
+            # Grow the rect
+            self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
+        elif self.hoverEffect[0] == "darken":
+            # Darken the rect
+            self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][0], self.color[1] - self.hoverEffect[1][1], self.color[2] - self.hoverEffect[1][2])
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "grow/darken":
+            # Grow and darken the rect
+            self.rect.grow(self.hoverEffect[1][0], self.hoverEffect[1][1])
+            self.rect.color = colorRGB(self.color[0] - self.hoverEffect[1][2][0], self.color[1] - self.hoverEffect[1][2][1], self.color[2] - self.hoverEffect[1][2][2])
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "color":
+            # Change the rect color
+            self.rect.color = colorRGB(*self.hoverEffect[1])
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "none":
+            pass
+        
+        self.rect.draw()
+        
+    def hoverExit(self, event):
+        if not self.enabled:
+            return
+        
+        self.mouseOver = True
+        
+        if self.hoverEffect[0] == "grow":
+            # Shrink the rect
+            self.rect.grow(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
+        elif self.hoverEffect[0] == "darken":
+            # Return the rect color to normal
+            self.rect.color = colorRGB(*self.color)
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "grow/darken":
+            # Return the rect size and color to normal
+            self.rect.grow(-self.hoverEffect[1][0], -self.hoverEffect[1][1])
+            self.rect.color = colorRGB(*self.color)
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "color":
+            # Return the rect color to normal
+            self.rect.color = colorRGB(*self.color)
+            self.entry.config(bg = self.rect.color)
+        elif self.hoverEffect[0] == "none":
+            pass
+        
+        self.rect.draw()
+    
+    def disable(self):
+        if self.mouseOver:
+            self.hoverExit(None)
+            
+        self.enabled = False
+        
+        self.config(state = tk.DISABLED)
+            
+        # Lighten the text color and darken the background color
+        self.itemconfig(self.text, fill = colorRGB(min(255, self.textColor[0] + 100), min(255, self.textColor[1] + 100), min(255, self.textColor[2] + 100)))
+        self.rect.color = colorRGB(max(0, self.color[0] - 50), max(0, self.color[1] - 50), max(0, self.color[2] - 50))
+    
+    def enable(self):
+        self.enabled = True
+        
+        self.config(state = tk.NORMAL)
+        
+        # Return the text color and the background color to normal
+        self.rect.color = colorRGB(*self.color)
+    
+    # Validate each character that gets typed
+    def validateChar(self, newText):
+        if not self.enabled:
+            return False
+    
+        # Set text color to black
+        self.entry.config(foreground = colorRGB(*self.textColor))
+        self.validInput = True
+        
+        if self.executeOnType:
+            self.submit(None, newText)
+        
+        return True
+    
+    def submit(self, value, newText = None):
+        if not self.enabled:
+            return False
+        
+        # Execute callback function with its arguments and the inputted text
+        if self.validInput and self.command != None:
+            if self.commandArgs != None and len(self.commandArgs) != 0:
+                if newText:
+                    self.command(newText, *self.commandArgs)
+                else:
+                    self.command(self.text, *self.commandArgs)
+            else:
+                if newText:
+                    self.command(newText)
+                else:
+                    self.command(self.text)
+
+        # Unfocus this entry if this wasn't called by typing
+        if newText == None:
+            _root.focus()
+    
+    def setInputCallback(self, callback, *args):
+        self.command = callback
+        self.commandArgs = args
+    
+    @property
+    def text(self):
+        return self.textvariable.get()
+    
+    @text.setter
+    def text(self, text):
+        self.textvariable.set(text)
+
 # Image Button
 class GraphicsButton(GraphicsObject):
     """
@@ -3399,8 +3616,8 @@ class GraphicsButton(GraphicsObject):
     enabled = True
     mouseOver = False
     
-    def __init__(self, x, y, image, pressedImage, width = 40, height = 40, tooltipText = "", command = None, pressCommand = None, commandArgs = None, outline = None, shouldPanZoom = False, canvas = None, **kw):
-        super().__init__(x, y, None, outline, shouldPanZoom, canvas)
+    def __init__(self, x, y, image, pressedImage, width = 40, height = 40, tooltipText = "", command = None, pressCommand = None, commandArgs = None, outline = None, shouldPanZoom = False, canvas = None, scale = 1, **kw):
+        super().__init__(x, y, None, outline, shouldPanZoom, canvas, scale = scale)
         self.command = command
         self.commandArgs = commandArgs
         self.pressCommand = pressCommand
@@ -3417,7 +3634,7 @@ class GraphicsButton(GraphicsObject):
         self.id = self.canvas.create_image(drawX, drawY, image = self.image, anchor = NW)
         
         if self.tooltipText != "":
-            self.tooltip = GraphicsTooltip(self.canvas, self, self.tooltipText)
+            self.tooltip = GraphicsTooltip(self.canvas, self, self.tooltipText, scale = self.scale)
         
         # Bind actions
         self.canvas.tag_bind(self.id, "<ButtonPress-1>", self.onPress, add = "+")
@@ -3739,8 +3956,9 @@ class GraphicsInputBox(GraphicsObject):
     def text(self, text):
         self.textvariable.set(text)
 
+# Tooltip for graphics objects
 class GraphicsTooltip:
-    def __init__(self, canvas, graphicsObject, text, waitTime = 500, xOffset = 10, yOffset = 10, **kwargs):
+    def __init__(self, canvas, graphicsObject, text, waitTime = 500, xOffset = 10, yOffset = 10, scale = 1.0, **kwargs):
         """
         Tooltip widget
         
@@ -3762,6 +3980,7 @@ class GraphicsTooltip:
         self.tooltipWindow = None
         self.label = None
         self.id = None
+        self.scale = scale
         self._id1 = self.canvas.tag_bind(self.graphicsObject.id, "<Enter>", self.showTooltip, add = '+')
         self._id2 = self.canvas.tag_bind(self.graphicsObject.id, "<Leave>", self.hideTooltip, add = '+')
         self._id3 = self.canvas.tag_bind(self.graphicsObject.id, "<ButtonPress>", self.hideTooltip, add = '+')
@@ -3822,11 +4041,12 @@ class GraphicsTooltip:
         y = self.canvas.winfo_pointery() + self.yOffset
 
         self.tooltipWindow = tw = tk.Toplevel(self.canvas)
+        tw.tk.call('tk', 'scaling', self.scale)
 
         # show no border on the top level window
         tw.wm_overrideredirect(1)
 
-        self.label = tk.Label(tw, text = self.text, justify = tk.LEFT, padx = 5, pady = 2, background = 'white', relief = tk.SOLID, borderwidth = 1)
+        self.label = tk.Label(tw, text = self.text, justify = tk.LEFT, padx = 5, pady = 2, background = 'white', relief = tk.SOLID, borderwidth = 1, font = getPrimaryFont((PRIMARY, 50, NORMAL)))
         self.tooltipWindow.bind('<Configure>', lambda event: self.label.config(wraplength = 150))
 
         lbl = self.label
