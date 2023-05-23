@@ -5,8 +5,8 @@ from Lib.DEgraphicsModified import *
 
 class QuadraticExplorer:
     topBarHeight = 100
-    width = 700
-    height = width + topBarHeight
+    width = 1200
+    height = 800 + topBarHeight
     drawHeight = width
 
     xOffset = 684
@@ -34,7 +34,7 @@ class QuadraticExplorer:
     c = 1.0
     scale = 1.0
 
-    halfWidth = int(width / 2)
+    halfWidth = width 
     halfHeight = int(height / 2)
     halfDrawHeight = halfHeight - topBarHeight
     halfTopBarHeight = int(topBarHeight / 2)
@@ -51,11 +51,11 @@ class QuadraticExplorer:
         # Creat the main window object
         self.mainWindow = DEGraphWin(defCoords=[-self.halfWidth, -self.halfHeight, self.halfWidth, self.halfHeight],
                                      offsets=[self.xOffset - (self.width / 2),
-                                              self.yOffset - (self.height / 2)],
+                                              self.yOffset - (self.height / 2) + 100],
                                      width=self.width,
                                      height=self.height,
                                      hThickness=0,
-                                     hasTitlebar=True, darkLightBehavior="System", colorTheme = "blue")
+                                     hasTitlebar=True, darkLightBehavior="System", colorTheme = "blue", useHiDPI = True)
         self.mainWindow.autoflush = True
         
         # Set the custom close protocol
@@ -478,14 +478,14 @@ class QuadraticExplorer:
         return self.lerp(min2, max2, self.inverseLerp(min1, max1, f))
 
 if __name__ == "__main__":
-    try:
-        # Create the object and call its main method
-        app = QuadraticExplorer()
-        app.main()
-    except:
+    #try:
+    # Create the object and call its main method
+    app = QuadraticExplorer()
+    app.main()
+    #except:
         # If an error (not a safe exit) is encountered, then relaunch
-        if not app.safeExit:
-            print("Error encountered, relaunching!")
-              
-            os.system("python3 .\Programs\Class\QuadraticExplorer.py")
-            exit()
+        #if not app.safeExit:
+        #print("Error encountered, relaunching!")
+            
+        #os.system("python3 .\Programs\Class\Misc\QuadraticExplorer.py")
+        #exit()

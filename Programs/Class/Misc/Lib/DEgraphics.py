@@ -144,7 +144,7 @@ class DEGraphWin(tk.Canvas):
         self.defaultCoords = defCoords
 
         # default background color is black
-        self.foreground = "black"
+        #self.foreground = "black"
 
         self.title = title
         self.height = int(height)
