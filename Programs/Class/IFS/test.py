@@ -7,7 +7,6 @@ import numpy as np
 # Remove everything in the Systems folder
 for file in os.listdir(os.path.dirname(os.path.realpath(__file__)) + "\\Systems"):
     os.remove(os.path.dirname(os.path.realpath(__file__)) + "\\Systems\\" + file)
-
     
 runDir = os.path.dirname(os.path.realpath(__file__))
 
@@ -77,20 +76,15 @@ def matrixToSR(a, b, c, d):
     Returns:
     A tuple of four values (scale x, scale y, theta, phi).
     """
-
-    # Calculate the scale factors.
-    scale_x = math.sqrt(a * a + b * b)
-    scale_y = math.sqrt(c * c + d * d)
-
-    # Calculate the rotation angles.
-    theta = math.degrees(math.atan2(c, a))
-    phi = math.degrees(math.atan2(d, b))
     
-    # Rigid rotation so phi = theta
-    phi = theta
+    xScale = np.sqrt(a**2 + b**2)
+    yScale = np.sqrt(c**2 + d**2)
+
+    theta = np.arctan2(b, a)
+    phi = np.arctan2(d, c)
 
     # Return the results.
-    return a, d, theta, phi
+    return xScale, yScale, theta * 180.0 / np.pi, theta * 180.0 / np.pi
 
 transforms = {}
 

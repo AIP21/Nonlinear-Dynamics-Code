@@ -7,6 +7,10 @@ from tkinter.font import Font
 import os
 import json
 import datetime
+import gc
+
+# Make garbage collection more aggressive
+gc.set_threshold(100, 10, 10)
 
 class IFSExplorer:
     PLAY_SOUNDS = True
@@ -70,12 +74,14 @@ class IFSExplorer:
     transformsScrollArea = None
     transformsScrollX = 0
     
+    helpBoxes = []
+    
     def __init__(self):
         self.initImagesAndSounds(os.path.dirname(os.path.realpath(__file__)))
         
-        self.win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT, scale = self.UI_SCALING, debugMode = True)
+        self.win = DEGraphWin("IFS Explorer", self.WIDTH, self.HEIGHT, scale = self.UI_SCALING) #, debugMode = True)
         
-        # self.win.hideTitlebar()
+        self.win.hideTitlebar()
         self.win.setTransparentColor("#ad0099")
         self.win.update_idletasks()
         self.win.resizable(False, False)
@@ -85,7 +91,7 @@ class IFSExplorer:
         self.win.setPrimaryFont(self.pixelFont)
                         
         # Create the Controls Window
-        self.createControlsWindow()
+        # self.createControlsWindow()
                 
         # UI stuff
         with self.win:
@@ -98,12 +104,12 @@ class IFSExplorer:
                 headerImg.draw()
                 
                 # Quit button
-                quitButton = GraphicsButton(self.WIDTH - 85, self.TOP_BAR_HEIGHT / 2 - 24, self.getImage("power button up"), self.getImage("power button down"), width = 50, height = 50, command = self.quit, pressCommand = self.clickDown, tooltipText = 'Quit the program', scale = self.UI_SCALING)
-                quitButton.draw()
+                self.quitButton = GraphicsButton(self.WIDTH - 85, self.TOP_BAR_HEIGHT / 2 - 24, self.getImage("power button up"), self.getImage("power button down"), width = 50, height = 50, command = self.quit, pressCommand = self.clickDown, tooltipText = 'Quit the program', scale = self.UI_SCALING)
+                self.quitButton.draw()
                 
                 # Help button
-                helpButton = GraphicsButton(self.WIDTH - 142, self.TOP_BAR_HEIGHT / 2 - 24, self.getImage("help button up"), self.getImage("help button down"), width = 50, height = 50, command = self.help, pressCommand = self.clickDown, tooltipText = 'Open help menu', scale = self.UI_SCALING)
-                helpButton.draw()
+                self.helpButton = GraphicsButton(self.WIDTH - 142, self.TOP_BAR_HEIGHT / 2 - 24, self.getImage("help button up"), self.getImage("help button down"), width = 50, height = 50, command = self.help, pressCommand = self.clickDown, tooltipText = 'Open help menu', scale = self.UI_SCALING)
+                self.helpButton.draw()
                 
                 # Create the canvas and plot for drawing the IFS
                 plotBackground = GraphicsImage(self.WIDTH / 2, self.TOP_BAR_HEIGHT + self.PLOT_HEIGHT / 2, PhotoImage(file = self.getImage("plot")), shouldPanZoom = False)
@@ -120,15 +126,28 @@ class IFSExplorer:
                 self.plotOverlay = GraphicsImage(self.WIDTH / 2, self.TOP_BAR_HEIGHT + self.PLOT_HEIGHT / 2, PhotoImage(file = self.getImage("plot overlay")), shouldPanZoom = False)
                 self.plotOverlay.resizeImage(self.WIDTH - 64, self.PLOT_HEIGHT - 64)
                 self.plotOverlay.draw()
+                
+                self.plotTitle = self.mainCanvas.create_text(self.WIDTH / 2, 115, text = "IFS Name: None", anchor = 'center', justify = 'center', font = ("Small Fonts", 70, BOLD), fill = "white")
+                self.mainCanvas.tag_raise(self.plotTitle)
             
             try:
                 # Create the IFS Config Panel
                 self.createIFSControlPanel()
             except Exception as e:
                 print("ERROR 0: " + str(e) + "\n\n" + str(traceback.format_exc()))
-                
+            
             # Plot the IFS
             self.plotIFS()
+            
+            def initHelp():
+                import time
+                time.sleep(0.5)
+                while self.helpButton == None:
+                    time.sleep(0.1)
+                self.help()
+            
+            thr = threading.Thread(target = initHelp)
+            thr.start()
     
     #region GUI
     # Create the IFS Control Panel
@@ -139,9 +158,9 @@ class IFSExplorer:
         with self.bottomPanel:
             buttonPanelWidth = 60
             
-            buttonsPanel = Canvas(width = buttonPanelWidth, height = bottomPanelHeight, bg = "#ad0099")
+            self.buttonsPanel = Canvas(width = buttonPanelWidth, height = bottomPanelHeight, bg = "#ad0099")
             
-            with buttonsPanel:
+            with self.buttonsPanel:
                 img = GraphicsImage(buttonPanelWidth / 2, bottomPanelHeight / 2, PhotoImage(file = self.getImage("warning panel long")), shouldPanZoom = False)
                 img.resizeImage(buttonPanelWidth, bottomPanelHeight)
                 img.draw()
@@ -151,21 +170,21 @@ class IFSExplorer:
                 spacing = 4
                 buttonX = buttonPanelWidth / 2 - 1 - buttonSize / 2
             
-                newButton = GraphicsButton(buttonX, yStart, self.getImage("add button up"), self.getImage("add button down"), width = buttonSize, height = buttonSize, command = self.newTransform, pressCommand = self.clickDown, tooltipText = 'Open help menu', scale = self.UI_SCALING)
-                newButton.draw()
+                self.newButton = GraphicsButton(buttonX, yStart, self.getImage("add button up"), self.getImage("add button down"), width = buttonSize, height = buttonSize, command = self.newTransform, pressCommand = self.clickDown, tooltipText = 'Open help menu', scale = self.UI_SCALING)
+                self.newButton.draw()
             
-                saveButton = GraphicsButton(buttonX, yStart + buttonSize + spacing, self.getImage("save button up"), self.getImage("save button down"), width = buttonSize, height = buttonSize, command = self.saveTransforms, pressCommand = self.clickDown, tooltipText = 'Save transforms to JSON', scale = self.UI_SCALING)
-                saveButton.draw()
+                self.saveButton = GraphicsButton(buttonX, yStart + buttonSize + spacing, self.getImage("save button up"), self.getImage("save button down"), width = buttonSize, height = buttonSize, command = self.saveTransforms, pressCommand = self.clickDown, tooltipText = 'Save transforms to JSON', scale = self.UI_SCALING)
+                self.saveButton.draw()
             
-                loadButton = GraphicsButton(buttonX, yStart + buttonSize * 2 + spacing * 2, self.getImage("load button up"), self.getImage("load button down"), width = buttonSize, height = buttonSize, command = self.loadTransforms, pressCommand = self.clickDown, tooltipText = 'Load transforms from JSON', scale = self.UI_SCALING)
-                loadButton.draw()
+                self.loadButton = GraphicsButton(buttonX, yStart + buttonSize * 2 + spacing * 2, self.getImage("load button up"), self.getImage("load button down"), width = buttonSize, height = buttonSize, command = self.loadTransforms, pressCommand = self.clickDown, tooltipText = 'Load transforms from JSON', scale = self.UI_SCALING)
+                self.loadButton.draw()
             
-                clearButton = GraphicsButton(buttonX, yStart + buttonSize * 3 + spacing * 3, self.getImage("x button up"), self.getImage("x button down"), width = buttonSize, height = buttonSize, command = self.clearTransforms, pressCommand = self.clickDown, tooltipText = 'Clear all transforms', scale = self.UI_SCALING)
-                clearButton.draw()
+                self.clearButton = GraphicsButton(buttonX, yStart + buttonSize * 3 + spacing * 3, self.getImage("x button up"), self.getImage("x button down"), width = buttonSize, height = buttonSize, command = self.clearTransforms, pressCommand = self.clickDown, tooltipText = 'Clear all transforms', scale = self.UI_SCALING)
+                self.clearButton.draw()
 
-            rightPanel = Canvas(width = self.WIDTH - buttonPanelWidth, height = bottomPanelHeight, bg = "#ad0099")
+            self.rightPanel = Canvas(width = self.WIDTH - buttonPanelWidth, height = bottomPanelHeight, bg = "#ad0099")
             
-            with rightPanel:
+            with self.rightPanel:
                 background = GraphicsImage((self.WIDTH - buttonPanelWidth) / 2, bottomPanelHeight / 2, PhotoImage(file = self.getImage("panel wide")), shouldPanZoom = False)
                 background.resizeImage(self.WIDTH - buttonPanelWidth, bottomPanelHeight)
                 background.draw()
@@ -215,8 +234,7 @@ class IFSExplorer:
                     
                     self.scrollArea.config(scrollregion = (0, 0, 0, 50 + len(self.initialTransforms) * 100))
                     
-                    self.initialTransforms = self.loadInitTransforms("rob.json")
-                    # self.initialTransforms = self.loadRandomSystem()
+                    self.initialTransforms = self.loadRandomSystem()
                     
                     # Add initial transforms
                     for i in range(len(self.initialTransforms)):
@@ -225,20 +243,7 @@ class IFSExplorer:
                         self.scrollArea.addWidget(gui, 50 + i * 100, y / 2)
                         self.transforms.append(gui)
                 
-                    rightPanel.addWidget(self.scrollArea, (self.WIDTH - buttonPanelWidth) / 2, bottomPanelHeight / 2, width = self.WIDTH - buttonPanelWidth - padX * 2, height = bottomPanelHeight - padY * 2)
-            
-    # Create the controls window
-    def createControlsWindow(self):
-        pass
-        # with Stack(bg = 'green'):
-        #     # Label("Controls", font = self.pixelFont)
-            
-        #     # ButtonImage(image = self.getImage("power button up"), pressedImage = self.getImage("power button down"), width = 40, height = 40, command = self.quit)
-        
-        #     Button("Clear", command = self.plot.clear)
-            
-        #     # with Stack():
-        #     self.ifsConfigWin = IFSConfigPanel(self)
+                    self.rightPanel.addWidget(self.scrollArea, (self.WIDTH - buttonPanelWidth) / 2, bottomPanelHeight / 2, width = self.WIDTH - buttonPanelWidth - padX * 2, height = bottomPanelHeight - padY * 2)
     #endregion
     
     #region Transform management
@@ -282,7 +287,7 @@ class IFSExplorer:
             y = self.BOTTOM_BAR_HEIGHT + 26 - 10 * 2
             i = len(self.transforms)
             gui = transformsCopy[i]
-            gui.index = i
+            gui.setIndex(i)
             self.scrollArea.addWidget(gui, 50 + i * 100, y / 2)
             self.transforms.append(gui)
         
@@ -309,10 +314,18 @@ class IFSExplorer:
     
     def loadTransforms(self):
         try:
-            file = filedialog.askopenfilename(initialdir = os.path.dirname(os.path.realpath(__file__)) + "/Systems", title = "Select file", filetypes = (("json files","*.json"),("all files","*.*")))
+            fileDir = filedialog.askopenfilename(initialdir = os.path.dirname(os.path.realpath(__file__)) + "/Systems", title = "Select file", filetypes = (("json files","*.json"),("all files","*.*")))
+            
+            if fileDir == "" or fileDir == None:
+                return
+            
+            lastSlash = fileDir.rfind("/")
+            name = fileDir[lastSlash + 1:].replace(".json", "")
+            self.mainCanvas.itemconfig(self.plotTitle, text = "IFS Name: " + name)
+            self.mainCanvas.tag_raise(self.plotTitle)
             
             # Load json
-            with open(file, "r") as file:
+            with open(fileDir, "r") as file:
                 loaded = json.load(file)
                 
             self.clearTransforms()
@@ -321,15 +334,18 @@ class IFSExplorer:
                 trans = IFS_Transform.ofDict(loaded[str(i)])
                 self.addTransform(trans)
             
-            print("Loaded transforms from " + file)
-        except:
-            print("Error reading JSON file")
+            print("Loaded transforms from " + fileDir)
+        except Exception as e:
+            print("Error reading JSON file. " + str(e) + "\n" + traceback.format_exc())
         
         self.plotIFS()
     
     def loadInitTransforms(self, fileName):
-        # Get random file
         fileDir = os.path.dirname(os.path.realpath(__file__)) + "/Systems/" + fileName
+        
+        name = fileName.replace(".json", "")
+        self.mainCanvas.itemconfig(self.plotTitle, text = "IFS Name: " + name)
+        self.mainCanvas.tag_raise(self.plotTitle)
         
         # Load json
         with open(fileDir, "r") as file:
@@ -360,6 +376,10 @@ class IFSExplorer:
             
             # Get random file
             fileDir = os.path.dirname(os.path.realpath(__file__)) + "/Systems/" + random.choice(files)
+            
+            name = fileDir.replace(os.path.dirname(os.path.realpath(__file__)) + "/Systems/", "").replace(".json", "")
+            self.mainCanvas.itemconfig(self.plotTitle, text = "IFS Name: " + name)
+            self.mainCanvas.tag_raise(self.plotTitle)
             
             # Load json
             with open(fileDir, "r") as file:
@@ -442,6 +462,13 @@ class IFSExplorer:
             
             print("Done iterating")
             
+            # Rotate every pixel by 45 degrees using the width and height
+            import copy
+            pixCopy = copy.deepcopy(self.pixels)
+            for x in range(self.PIX_WIDTH):
+                for y in range(self.PIX_HEIGHT):
+                    self.pixels[x][y] = pixCopy[y][x]
+            
             img.put(self.pixels, (0, 0))
             
             self.plot.setImage(img)
@@ -454,6 +481,8 @@ class IFSExplorer:
             print("Skips: " + str(self.skips))
         except Exception as e:
             print("Error plotting IFS: " + str(e) + " stack: " + str(traceback.format_exc()))
+        
+        gc.collect()
     
     # Choose a random transform using its probability
     def chooseTransform(self):
@@ -572,8 +601,96 @@ class IFSExplorer:
     #endregion
     
     #region Guide
+    # Show a help window with info about the program
     def help(self):
-        print('help')
+        print("Showing help")
+        
+        helpBoxes = [
+                    ("Hello there! Our sensors detect that this is the first time you are powering on this device.\n\nThis is the IFS EXPLORER 2000™®© - A never before seen handheld, portable, and powerful tool used for exploring the IFS world.\n\nThis user manual will show you how to use this state-of-the-art tool that lets you explore the beauty and intricacies of Iterated Function Systems and teach you about the incredible things you can do with this device. All buttons, switches, and screens on this tool have tooltips, just hover your finger over something to get a better understanding of what it does.\n\n(WARNING: If you attempt to disassemble this device then our hitmen will be informed of your location and the device will self destruct)", self.win, (self.WIDTH / 2 - 150, self.HEIGHT / 2 - 200)),
+                    ("If you would like to re-open this user manual, click the green help button.", self.helpButton, (-300, 50)),
+                    ("If you would like to turn off the device, click the red power button.", self.quitButton, (-300, 50)),
+                    ("The large glass panel in the center of this tool is called the ScreenTron 6000®. Featuring a massive 3 inch OLED display, this tool has the largest screen in the industry. The ScreenTron 6000® displays to you in high-resolution the IFS system you are currently drawing.", self.win, (self.WIDTH / 2 - 150, self.HEIGHT / 2 - 100)),
+                    ("The striped metal panel near the bottom left of this device is called the Multidimensional Transform Instance Manipulator. This lets you tap into the intergalactic energy fields and change the parameters of each individual transform in the IFS you are currently plotting.", self.buttonsPanel, (60, 0)),
+                    ("This button adds a new transform to the IFS system.", self.newButton, (25, -90)),
+                    ("This button saves the current IFS system to a json file.", self.saveButton, (25, -90)),
+                    ("This button loads an IFS system from a json file.\nYou have the choice of a wide variety of handcrafted and (relatively) high quality pre-made IFS systems.\n\nNOTE: Since these presets were not made by me, some might not function properly with this device due to error in translating the two file formats.\n\nThese systems were sourced from the ifs files on the website: https://larryriddle.agnesscott.org/ifskit/gallery/gallery.htm", self.loadButton, (25, -170)),
+                    ("This button clears the current IFS system.", self.clearButton, (25, -75)),
+                    ("The long metal panel at the bottom right of the device is the Transform Flux Editor. This allows you to see individual transforms, change their values, or remove them. You can scroll your mouse wheel anywhere on the device to scroll through this list. You may notice that there already are a bunch of transforms listed. This is because, upon being turned on, the device intelligently picks out a random preset transform from the folder called Transforms located at this classpath directory on the device's Quantum Entangulator Memory.", self.rightPanel, (-300, -80)),
+                    ("Each panel in this list represents one transform. It contains the parameters for each value of a transform.", self.transforms[0], (-80, -110)),
+                    ("This button updates the IFS graph with its new values.", self.transforms[0].updateButton, (20, -85)),
+                    ("This input lets you change the x scale of the transform.", self.transforms[0].rInput, (-290, -85)),
+                    ("This input lets you change the y scale of the transform.", self.transforms[0].sInput, (-290, -85)),
+                    ("This input lets you change the x shift of the transform.", self.transforms[0].hInput, (-280, -85)),
+                    ("This input lets you change the y shift of the transform.", self.transforms[0].kInput, (-280, -85)),
+                    ("This input lets you change the theta of the transform.", self.transforms[0].thetaInput, (-275, -85)),
+                    ("This input lets you change the probability of the transform being selected when drawing the IFS.", self.transforms[0].probabilityInput, (-305, -85)),
+                    ("Click this box to select the color of the transform.", self.transforms[0].colorInput, (-300, -70)),
+                    ("This button removes this transform from the transform list.", self.transforms[0].removeButton, (20, -85)),
+                    ("That the last page of the user manual! If you need to re-open this user manual, press the green help button on the top right corner of the device.", self.win, (self.WIDTH / 2 - 150, self.HEIGHT / 2 - 75))
+                    ]
+        
+        # If a help box is already being shown, then hide it
+        try:
+            if self.helpBox != None:
+                self.helpBox.hide()
+                
+                # Un-highlight the currently targeted widget (excluding the welcome box)
+                if self.helpBoxIndex >= 1:
+                    # Check target widget type
+                    if isinstance(helpBoxes[self.helpBoxIndex][1], HideableFrame):
+                        helpBoxes[self.helpBoxIndex][1].showHideButton.config(highlightthickness = 0)
+                    else:
+                        helpBoxes[self.helpBoxIndex][1].config(highlightthickness = 0)
+        except:
+            pass
+        
+        self.helpBoxIndex = -1
+        self.helpBox = None
+        
+        # Show next help box 
+        def nextHelpBox():
+            # Un-highlight the last targeted widget (excluding the welcome box)
+            # if self.helpBoxIndex >= 1:
+            #     # Check target widget type
+            #     if isinstance(helpBoxes[self.helpBoxIndex][1], HideableFrame):
+            #         helpBoxes[self.helpBoxIndex][1].showHideButton.config(highlightthickness = 0)
+            #     else:
+            #         helpBoxes[self.helpBoxIndex][1].config(highlightthickness = 0)
+            
+            # Make sure we still have help boxes to show. If we're done, then destroy the last one
+            if self.helpBoxIndex >= len(helpBoxes) - 1:
+                self.helpBox.hide()
+                return
+        
+            self.helpBoxIndex += 1
+            
+            print("Showing help box #" + str(self.helpBoxIndex))
+            
+            # Destroy old help box
+            if self.helpBox != None:
+                self.helpBox.hide()
+            
+            data = helpBoxes[self.helpBoxIndex]
+            
+            # Highlight the targeted widget (excluding the welcome box)
+            # if self.helpBoxIndex >= 1:
+            #     # Check target widget type
+            #     data[1].setOutline('red')
+            #     data[1].setOutlineThickness(5)
+            
+            # Next button text
+            if self.helpBoxIndex >= len(helpBoxes) - 1:
+                # self.temp.destroy()
+                nextText = "Close User Manual"
+            else:
+                nextText = "Next Page"
+            
+            # Create a popup with the text and position it next to the widget with the desired offset
+            self.helpBox = Popup(data[1], text = data[0], closeButtonText = nextText, xOffset = data[2][0], yOffset = data[2][1], font = (PRIMARY, 50, NORMAL))
+            self.helpBox.show()
+            self.helpBox.registerCloseCommand(nextHelpBox)
+        
+        nextHelpBox()
     #endregion
     
     # Quit the program
@@ -617,39 +734,37 @@ class TransformGUI(Canvas):
         
         self.transform = transform
         
-        self.create_text(45, 10, text = str(self.index), anchor = "nw", font = ("Small Fonts", 12, BOLD), fill = "white")
+        self.title = self.create_text(45, 10, text = str(self.index + 1), anchor = "nw", font = ("Small Fonts", 40, BOLD), fill = "white")
         
-        self.rInput = FloatBox(50, 20, self.transform.getR())
-        self.addWidget(self.rInput, 10, 70)
-        self.sInput = FloatBox(50, 20, self.transform.getS())
-        self.addWidget(self.sInput, 20, 70)
+        self.rInput = GraphicsFloatBox(31, 25, 34, 20, self.main.getImage("sunken box"), self.transform.getR(), tooltipText = "X Scale")
+        self.rInput.draw()
+        self.sInput = GraphicsFloatBox(68, 25, 34, 20, self.main.getImage("sunken box"), self.transform.getS(), tooltipText = "Y Scale")
+        self.sInput.draw()
         
-        # self.thetaInput = FloatBox(50, 20, self.transform.getTheta())
-        # self.addWidget(self.thetaInput, 10, 130)
-        # self.phiInput = FloatBox(50, 20, self.transform.getPhi())
-        # self.addWidget(self.thetaInput, 20, 130)
+        self.hInput = GraphicsFloatBox(31, 45, 34, 20, self.main.getImage("sunken box"), self.transform.getE(), tooltipText = "X Shift")
+        self.hInput.draw()
+        self.kInput = GraphicsFloatBox(68, 45, 34, 20, self.main.getImage("sunken box"), self.transform.getF(), tooltipText = "Y Shift")
+        self.kInput.draw()
         
-        # self.hInput = FloatBox(50, 20, self.transform.getE())
-        # self.addWidget(self.hInput, 10, 160)
-        # self.kInput = FloatBox(50, 20, self.transform.getF())
-        # self.addWidget(self.kInput, 20, 160)
+        self.thetaInput = GraphicsFloatBox(31, 65, 34, 20, self.main.getImage("sunken box"), self.transform.getTheta(), tooltipText = "Theta")
+        self.thetaInput.draw()
+        self.probabilityInput = GraphicsFloatBox(68, 65, 34, 20, self.main.getImage("sunken box"), self.transform.getProb(), tooltipText = "Probability")
+        self.probabilityInput.draw()
         
-        # self.probabilityInput = FloatBox(50, 20, self.transform.getE())
-        # self.addWidget(self.probabilityInput, 10, 220)
-        # self.colorInput = ColorWidget(50, 20, self.transform.getColor(), "", buttonLabelPrefix = "")
-        # self.addWidget(self.colorInput, 20, 220)
+        self.colorInput = GraphicsSwatch(68 - 6, 85 + 2, 12, 12, self.transform.getColor(), tooltipText = "Transform Color")
+        self.colorInput.draw()
 
         # Remove button
-        removeButton = GraphicsButton(0, 0, self.main.getImage("x button up"), self.main.getImage("x button down"), width = 20, height = 20, command = lambda: self.main.removeTransform(self.index), tooltipText = "Remove transform", scale = self.main.UI_SCALING)
-        removeButton.draw()
+        self.removeButton = GraphicsButton(3, 3, self.main.getImage("x button up"), self.main.getImage("x button down"), width = 20, height = 20, command = lambda: self.main.removeTransform(self.index), tooltipText = "Remove transform", scale = self.main.UI_SCALING)
+        self.removeButton.draw()
 
         # Update button
-        updateButton = GraphicsButton(40, 85, self.a, self.b, width = 20, height = 20, command = self.updateTransform, tooltipText = "Update transform", scale = self.main.UI_SCALING)
-        updateButton.draw()
+        self.updateButton = GraphicsButton(31, 85, self.a, self.b, width = 20, height = 20, command = self.updateTransform, tooltipText = "Update transform", scale = self.main.UI_SCALING)
+        self.updateButton.draw()
 
     def updateTransform(self):
         print("Before update " + str(self.transform))
-        self.transform = IFS_Transform(self.rInput.value, self.sInput.value, self.thetaInput.value, self.phiInput.value, self.hInput.value, self.kInput.value, self.probabilityInput.value, self.colorInput.color)
+        self.transform = IFS_Transform(self.rInput.value, self.sInput.value, self.thetaInput.value, self.thetaInput.value, self.hInput.value, self.kInput.value, self.probabilityInput.value, self.colorInput.getColor())
         print("After update " + str(self.transform))
         
         self.plotCallback()
@@ -665,6 +780,10 @@ class TransformGUI(Canvas):
 
     def probability(self):
         return self.transform.getProb()
+
+    def setIndex(self, index):
+        self.index = index
+        self.itemconfig(self.title, text = str(self.index + 1))
 
 if __name__ == "__main__":
     IFSExplorer()
