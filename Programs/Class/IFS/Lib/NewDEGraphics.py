@@ -4,6 +4,8 @@ I wrote this from the ground up to be fast, easy to use, extensible, and good-lo
 
 I used some code from other python libraries on GitHub, and have modified it to fit my needs.
 Any code that I did not write myself is marked with a comment above the function or region of code, it contains the link to the GitHub repository where I found that code.
+
+Author: Alexander Irausquin-Petit
 """
 
 from contextlib import contextmanager

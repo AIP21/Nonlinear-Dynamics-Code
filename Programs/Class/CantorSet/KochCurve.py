@@ -47,17 +47,20 @@ class KochCurve:
         with open("KochCurveData DO NOT OPEN (just kidding you can open it if you want to).txt", "w") as f:
             f.write("THIS IS JUST A PLACEHOLDER FILE! I put the bee movie script in it because funny. This is simply a way for the program to tell if it's the first time running it.\n ... \n")
             
-            import urllib.request  # The library that handles the url stuff
+            try:
+                import urllib.request  # The library that handles the url stuff
 
-            # This code just fetched the bee movie script from GitHub and puts it in the file (I needed to fill the file with something)
-            targetURL = "https://gist.githubusercontent.com/MattIPv4/045239bc27b16b2bcf7a3a9a4648c08a/raw/2411e31293a35f3e565f61e7490a806d4720ea7e/bee%2520movie%2520script"
-            for line in urllib.request.urlopen(targetURL):
-                lineStr = line.decode('utf-8')
-                
-                if len(self.lines) < 6000:
-                    self.lines += lineStr
-                
-                f.write(lineStr)
+                # This code just fetched the bee movie script from GitHub and puts it in the file (I needed to fill the file with something)
+                targetURL = "https://gist.githubusercontent.com/MattIPv4/045239bc27b16b2bcf7a3a9a4648c08a/raw/2411e31293a35f3e565f61e7490a806d4720ea7e/bee%2520movie%2520script"
+                for line in urllib.request.urlopen(targetURL):
+                    lineStr = line.decode('utf-8')
+                    
+                    if len(self.lines) < 6000:
+                        self.lines += lineStr
+                    
+                    f.write(lineStr)
+            except:
+                pass
             
             f.close()
                         
